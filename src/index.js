@@ -3,7 +3,7 @@ const express = require('express');
 const SohuScraper = require('./scrapers/sohu/sohu-scraper');
 const GamelookScraper = require('./scrapers/gamelook/gamelook-scraper');
 const NineGameRankingListScraper = require('./scrapers/9game/9game-ranking-list-scraper');
-const GnnScraper = require('./scrapers/gnn/gnn-scraper');
+const GnnQuickScraper = require('./scrapers/gnn/gnn-quick-scraper');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,7 +15,7 @@ const scrapers = {
   sohu: new SohuScraper(),
   gamelook: new GamelookScraper(),
   '9game': new NineGameRankingListScraper(),
-  gnn: new GnnScraper()
+  gnn: new GnnQuickScraper()
 };
 
 app.get('/health', (req, res) => {
