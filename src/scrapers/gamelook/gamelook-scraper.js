@@ -13,6 +13,14 @@ const SCRAPER_CONFIG = {
     postingdate: 'span',
     description: 'meta[name="description"]'
   },
+  TIMEOUTS: {
+    PAGE_LOAD: 30000,
+    DETAIL_LOAD: 30000,
+    WAIT_AFTER_LOAD: 3000,
+    WAIT_AFTER_DETAIL: 2000,
+    BATCH_DELAY: 2000,
+    RETRY_DELAY: 2000
+  },
   USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   USE_PUPPETEER: true
 };
@@ -94,8 +102,8 @@ class GamelookScraper {
           detailedData.push(...batchResults);
           
           if (i + this.config.BATCH_SIZE < allLinks.length) {
-            console.log(`[GAMELOOK]   Waiting 2 seconds before next batch...`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.log(`[GAMELOOK]   Waiting ${this.config.TIMEOUTS.BATCH_DELAY}ms before next batch...`);
+            await new Promise(resolve => setTimeout(resolve, this.config.TIMEOUTS.BATCH_DELAY));
           }
         }
 
@@ -113,7 +121,7 @@ class GamelookScraper {
         }
         
         attempt++;
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, this.config.TIMEOUTS.RETRY_DELAY));
       } finally {
         if (browser) {
           await browser.close();
@@ -131,10 +139,10 @@ class GamelookScraper {
       
       await page.goto(pageUrl, { 
         waitUntil: 'domcontentloaded',
-        timeout: 30000 
+        timeout: this.config.TIMEOUTS.PAGE_LOAD 
       });
       
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(this.config.TIMEOUTS.WAIT_AFTER_LOAD);
 
       const links = await page.$$eval(this.config.LINKS_SELECTOR, (elements) => {
         return elements.map(el => el.href);
@@ -155,10 +163,10 @@ class GamelookScraper {
       
       await page.goto(url, { 
         waitUntil: 'domcontentloaded',
-        timeout: 120000
+        timeout: this.config.TIMEOUTS.DETAIL_LOAD
       });
       
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(this.config.TIMEOUTS.WAIT_AFTER_DETAIL);
 
       const details = await page.evaluate((url, selectors) => {
         const getTextContent = (selector) => {
