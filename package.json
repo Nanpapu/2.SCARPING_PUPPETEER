@@ -1,0 +1,21 @@
+{
+  "name": "sohu-scraper",
+  "version": "1.0.0",
+  "description": "Simple web scraper for sohu.com using Puppeteer",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "puppeteer": "^21.5.0",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["scraper", "puppeteer", "sohu", "web-scraping"],
+  "author": "",
+  "license": "MIT"
+}
