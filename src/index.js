@@ -3,6 +3,7 @@ const express = require('express');
 const SohuScraper = require('./scrapers/sohu/sohu-scraper');
 const GamelookScraper = require('./scrapers/gamelook/gamelook-scraper');
 const NineGameRankingListScraper = require('./scrapers/9game/9game-ranking-list-scraper');
+const GnnScraper = require('./scrapers/gnn/gnn-scraper');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,7 +14,8 @@ app.use(express.json());
 const scrapers = {
   sohu: new SohuScraper(),
   gamelook: new GamelookScraper(),
-  '9game': new NineGameRankingListScraper()
+  '9game': new NineGameRankingListScraper(),
+  gnn: new GnnScraper()
 };
 
 app.get('/health', (req, res) => {
@@ -94,6 +96,29 @@ app.post('/api/scrape/9game', async (req, res) => {
   }
 });
 
+app.post('/api/scrape/gnn', async (req, res) => {
+  try {
+    console.log('[SERVER] GNN manual scrape triggered');
+    const result = await scrapers.gnn.scrape();
+    
+    res.json({
+      success: true,
+      message: 'GNN scraping completed successfully',
+      scraper: 'gnn',
+      data: result
+    });
+  } catch (error) {
+    console.error('[SERVER] GNN scraping failed:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      message: 'GNN scraping failed',
+      scraper: 'gnn',
+      error: error.message
+    });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Multi-website scraper server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
@@ -101,4 +126,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Sohu scraper: POST http://localhost:${PORT}/api/scrape/sohu`);
   console.log(`Gamelook scraper: POST http://localhost:${PORT}/api/scrape/gamelook`);
   console.log(`9Game scraper: POST http://localhost:${PORT}/api/scrape/9game`);
+  console.log(`GNN scraper: POST http://localhost:${PORT}/api/scrape/gnn`);
 });
