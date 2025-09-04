@@ -1,14 +1,14 @@
-const SohuScraper = require('./src/scraper');
+const SohuScraper = require('./src/scrapers/sohu/sohu-scraper');
 
-async function testScraper() {
+async function testSohuScraper() {
   try {
-    console.log('Testing scraper...');
+    console.log('Testing Sohu scraper...');
     const scraper = new SohuScraper();
     const result = await scraper.scrape();
-    console.log('Result:', JSON.stringify(result, null, 2));
+    console.log('Sohu Result:', JSON.stringify(result, null, 2));
   } catch (error) {
-    console.error('Test failed:', error.message);
+    console.error('Sohu test failed:', error.message);
   }
 }
 
-testScraper();
+testSohuScraper();

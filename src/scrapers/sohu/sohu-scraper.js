@@ -1,23 +1,36 @@
+// SOHU.COM SCRAPER CONFIGURATION
+const SCRAPER_CONFIG = {
+  BATCH_SIZE: 50,
+  MAX_RETRIES: 3,
+  TARGET_URL: 'https://www.sohu.com/',
+  LINKS_SELECTOR: 'ul.news[data-spm="top-news1"] a.titleStyle',
+  DETAILS_SELECTORS: {
+    title: 'h1',
+    time: 'span#news-time',
+    location: 'div.area > span:last-child',
+    image: 'img',
+    description: 'meta[name="description"]'
+  },
+  USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  USE_PUPPETEER: true
+};
+
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
 class SohuScraper {
   constructor() {
-    this.targetUrl = 'https://www.sohu.com/';
-    this.selector = 'ul.news[data-spm="top-news1"] a.titleStyle';
-    this.maxRetries = 3;
-    this.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-    this.batchSize = parseInt(process.env.BATCH_SIZE) || 10;
+    this.config = SCRAPER_CONFIG;
   }
 
   async scrape() {
     let browser = null;
     let attempt = 1;
 
-    while (attempt <= this.maxRetries) {
+    while (attempt <= this.config.MAX_RETRIES) {
       try {
-        console.log(`Scraping attempt ${attempt}/${this.maxRetries}`);
+        console.log(`[SOHU] Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
         
         browser = await puppeteer.launch({
           headless: 'new',
@@ -38,19 +51,19 @@ class SohuScraper {
 
         const page = await browser.newPage();
         
-        await page.setUserAgent(this.userAgent);
+        await page.setUserAgent(this.config.USER_AGENT);
         await page.setViewport({ width: 1366, height: 768 });
 
-        console.log('Loading sohu.com...');
-        await page.goto(this.targetUrl, { 
+        console.log('[SOHU] Loading sohu.com...');
+        await page.goto(this.config.TARGET_URL, { 
           waitUntil: 'domcontentloaded',
           timeout: 30000 
         });
 
         await page.waitForTimeout(3000);
 
-        console.log('Extracting links...');
-        const links = await page.$$eval(this.selector, (elements) => {
+        console.log('[SOHU] Extracting links...');
+        const links = await page.$$eval(this.config.LINKS_SELECTOR, (elements) => {
           return elements.map(el => el.href);
         });
 
@@ -58,20 +71,20 @@ class SohuScraper {
           throw new Error('No links found with the specified selector');
         }
 
-        console.log(`Found ${links.length} links, extracting details in batches of ${this.batchSize}...`);
+        console.log(`[SOHU] Found ${links.length} links, extracting details in batches of ${this.config.BATCH_SIZE}...`);
         const detailedData = [];
 
-        for (let i = 0; i < links.length; i += this.batchSize) {
-          const batch = links.slice(i, i + this.batchSize);
-          console.log(`Processing batch ${Math.floor(i / this.batchSize) + 1}/${Math.ceil(links.length / this.batchSize)} (${batch.length} links)`);
+        for (let i = 0; i < links.length; i += this.config.BATCH_SIZE) {
+          const batch = links.slice(i, i + this.config.BATCH_SIZE);
+          console.log(`[SOHU] Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(links.length / this.config.BATCH_SIZE)} (${batch.length} links)`);
           
           const batchPromises = batch.map(async (link, index) => {
             try {
-              console.log(`  Processing link ${i + index + 1}/${links.length}: ${link}`);
+              console.log(`[SOHU]   Processing link ${i + index + 1}/${links.length}: ${link}`);
               const details = await this.extractLinkDetails(browser, link);
               return details;
             } catch (error) {
-              console.error(`  Failed to extract details from ${link}:`, error.message);
+              console.error(`[SOHU]   Failed to extract details from ${link}:`, error.message);
               return {
                 href: link,
                 title: null,
@@ -86,8 +99,8 @@ class SohuScraper {
           const batchResults = await Promise.all(batchPromises);
           detailedData.push(...batchResults);
           
-          if (i + this.batchSize < links.length) {
-            console.log(`  Waiting 2 seconds before next batch...`);
+          if (i + this.config.BATCH_SIZE < links.length) {
+            console.log(`[SOHU]   Waiting 2 seconds before next batch...`);
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
         }
@@ -95,14 +108,14 @@ class SohuScraper {
         const result = this.formatResult(detailedData);
         await this.saveToFile(result);
 
-        console.log(`Successfully scraped ${links.length} links with details`);
+        console.log(`[SOHU] Successfully scraped ${links.length} links with details`);
         return result;
 
       } catch (error) {
-        console.error(`Attempt ${attempt} failed:`, error.message);
+        console.error(`[SOHU] Attempt ${attempt} failed:`, error.message);
         
-        if (attempt === this.maxRetries) {
-          throw new Error(`Scraping failed after ${this.maxRetries} attempts: ${error.message}`);
+        if (attempt === this.config.MAX_RETRIES) {
+          throw new Error(`Scraping failed after ${this.config.MAX_RETRIES} attempts: ${error.message}`);
         }
         
         attempt++;
@@ -119,7 +132,7 @@ class SohuScraper {
     const page = await browser.newPage();
     
     try {
-      await page.setUserAgent(this.userAgent);
+      await page.setUserAgent(this.config.USER_AGENT);
       await page.setViewport({ width: 1366, height: 768 });
       
       await page.goto(url, { 
@@ -129,7 +142,7 @@ class SohuScraper {
       
       await page.waitForTimeout(2000);
 
-      const details = await page.evaluate((url) => {
+      const details = await page.evaluate((url, selectors) => {
         const getTextContent = (selector) => {
           const element = document.querySelector(selector);
           return element ? element.textContent.trim() : null;
@@ -142,13 +155,13 @@ class SohuScraper {
 
         return {
           href: url,
-          title: getTextContent('h1'),
-          time: getTextContent('span#news-time'),
-          location: getTextContent('div.area > span:last-child'),
-          image: getAttribute('img', 'src'),
-          description: getAttribute('meta[name="description"]', 'content')
+          title: getTextContent(selectors.title),
+          time: getTextContent(selectors.time),
+          location: getTextContent(selectors.location),
+          image: getAttribute(selectors.image, 'src'),
+          description: getAttribute(selectors.description, 'content')
         };
-      }, url);
+      }, url, this.config.DETAILS_SELECTORS);
 
       return details;
     } finally {
@@ -162,7 +175,7 @@ class SohuScraper {
     
     return {
       timestamp: vietnamTime.toISOString().replace('Z', '+07:00'),
-      source: this.targetUrl,
+      source: this.config.TARGET_URL,
       data: links,
       total: links.length
     };
@@ -179,10 +192,10 @@ class SohuScraper {
     const minutes = String(vietnamTime.getUTCMinutes()).padStart(2, '0');
     
     const filename = `sohu-${day}-${month}-${year}-${hours}-${minutes}.json`;
-    const filepath = path.join(__dirname, '../results', filename);
+    const filepath = path.join(__dirname, '../../../results/sohu', filename);
 
     await fs.promises.writeFile(filepath, JSON.stringify(data, null, 2), 'utf8');
-    console.log(`Results saved to: ${filename}`);
+    console.log(`[SOHU] Results saved to: results/sohu/${filename}`);
     
     return filename;
   }
