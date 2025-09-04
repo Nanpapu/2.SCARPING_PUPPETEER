@@ -1,6 +1,6 @@
 // GNN.GAMER.COM.TW SCRAPER CONFIGURATION
 const SCRAPER_CONFIG = {
-  BATCH_SIZE: 30,
+  BATCH_SIZE: 25,
   MAX_RETRIES: 3,
   CATEGORIES: [
     { url: 'https://gnn.gamer.com.tw/index.php?k=4', source: '手機' },
@@ -20,11 +20,11 @@ const SCRAPER_CONFIG = {
     image: 'img[name="gnnPIC"]'
   },
   TIMEOUTS: {
-    PAGE_LOAD: 30000,
-    DETAIL_LOAD: 30000,
+    PAGE_LOAD: 60000,
+    DETAIL_LOAD: 60000,
     WAIT_AFTER_LOAD: 3000,
     WAIT_AFTER_DETAIL: 2000,
-    BATCH_DELAY: 2000,
+    BATCH_DELAY: 10000,
     RETRY_DELAY: 2000
   },
   USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -65,30 +65,52 @@ class GnnScraper {
           executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
         });
 
-        // Collect all links from all categories
-        const allLinks = [];
-        for (const category of this.config.CATEGORIES) {
-          console.log(`[GNN] Processing category: ${category.source}`);
-          
+        // Collect all links from all categories in parallel
+        console.log(`[GNN] Processing all ${this.config.CATEGORIES.length} categories in parallel...`);
+        const categoryPromises = this.config.CATEGORIES.map(async (category) => {
+          console.log(`[GNN] Starting category: ${category.source}`);
           const categoryLinks = await this.extractLinksFromCategory(browser, category);
-          allLinks.push(...categoryLinks);
           console.log(`[GNN] Found ${categoryLinks.length} links from ${category.source}`);
-        }
+          return categoryLinks;
+        });
 
-        if (allLinks.length === 0) {
+        const categoryResults = await Promise.all(categoryPromises);
+        const allLinksWithDuplicates = categoryResults.flat();
+
+        // Merge duplicate links and combine sources
+        const linkMap = new Map();
+        allLinksWithDuplicates.forEach(linkData => {
+          if (linkMap.has(linkData.link)) {
+            // Link exists, add source to array
+            const existing = linkMap.get(linkData.link);
+            if (!existing.source.includes(linkData.source)) {
+              existing.source.push(linkData.source);
+            }
+          } else {
+            // New link, create with source as array
+            linkMap.set(linkData.link, {
+              link: linkData.link,
+              source: [linkData.source]
+            });
+          }
+        });
+
+        const uniqueLinks = Array.from(linkMap.values());
+        
+        if (uniqueLinks.length === 0) {
           throw new Error('No links found from any categories');
         }
 
-        console.log(`[GNN] Total found ${allLinks.length} links, extracting details in batches of ${this.config.BATCH_SIZE}...`);
+        console.log(`[GNN] Total found ${allLinksWithDuplicates.length} links (${uniqueLinks.length} unique), extracting details in batches of ${this.config.BATCH_SIZE}...`);
         const detailedData = [];
 
-        for (let i = 0; i < allLinks.length; i += this.config.BATCH_SIZE) {
-          const batch = allLinks.slice(i, i + this.config.BATCH_SIZE);
-          console.log(`[GNN] Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(allLinks.length / this.config.BATCH_SIZE)} (${batch.length} links)`);
+        for (let i = 0; i < uniqueLinks.length; i += this.config.BATCH_SIZE) {
+          const batch = uniqueLinks.slice(i, i + this.config.BATCH_SIZE);
+          console.log(`[GNN] Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(uniqueLinks.length / this.config.BATCH_SIZE)} (${batch.length} links)`);
           
           const batchPromises = batch.map(async (linkData, index) => {
             try {
-              console.log(`[GNN]   Processing link ${i + index + 1}/${allLinks.length}: ${linkData.link}`);
+              console.log(`[GNN]   Processing link ${i + index + 1}/${uniqueLinks.length}: ${linkData.link}`);
               const details = await this.extractLinkDetails(browser, linkData.link);
               return {
                 source: linkData.source,
@@ -112,17 +134,28 @@ class GnnScraper {
           const batchResults = await Promise.all(batchPromises);
           detailedData.push(...batchResults);
           
-          if (i + this.config.BATCH_SIZE < allLinks.length) {
+          if (i + this.config.BATCH_SIZE < uniqueLinks.length) {
             console.log(`[GNN]   Waiting ${this.config.TIMEOUTS.BATCH_DELAY}ms before next batch...`);
             await new Promise(resolve => setTimeout(resolve, this.config.TIMEOUTS.BATCH_DELAY));
           }
         }
 
-        const result = this.formatResult(detailedData);
-        await this.saveToFile(result);
+        try {
+          const result = this.formatResult(detailedData);
+          await this.saveToFile(result);
 
-        console.log(`[GNN] Successfully scraped ${allLinks.length} links with details`);
-        return result;
+          console.log(`[GNN] Successfully scraped ${uniqueLinks.length} links with details`);
+          return result;
+        } catch (saveError) {
+          console.error(`[GNN] Error during save/format:`, saveError.message);
+          // Still return result even if formatting/saving fails
+          return {
+            timestamp: new Date().toISOString(),
+            source: 'GNN.GAMER.COM.TW Multiple Categories',
+            data: detailedData,
+            total: detailedData.length
+          };
+        }
 
       } catch (error) {
         console.error(`[GNN] Attempt ${attempt} failed:`, error.message);
