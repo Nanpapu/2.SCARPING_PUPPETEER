@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const SohuScraper = require('./scrapers/sohu/sohu-scraper');
 const GamelookScraper = require('./scrapers/gamelook/gamelook-scraper');
+const NineGameRankingListScraper = require('./scrapers/9game/9game-ranking-list-scraper');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,7 +12,8 @@ app.use(express.json());
 // Initialize scrapers
 const scrapers = {
   sohu: new SohuScraper(),
-  gamelook: new GamelookScraper()
+  gamelook: new GamelookScraper(),
+  '9game': new NineGameRankingListScraper()
 };
 
 app.get('/health', (req, res) => {
@@ -69,10 +71,34 @@ app.post('/api/scrape/gamelook', async (req, res) => {
   }
 });
 
+app.post('/api/scrape/9game', async (req, res) => {
+  try {
+    console.log('[SERVER] 9Game manual scrape triggered');
+    const result = await scrapers['9game'].scrape();
+    
+    res.json({
+      success: true,
+      message: '9Game scraping completed successfully',
+      scraper: '9game',
+      data: result
+    });
+  } catch (error) {
+    console.error('[SERVER] 9Game scraping failed:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      message: '9Game scraping failed',
+      scraper: '9game',
+      error: error.message
+    });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Multi-website scraper server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`Available scrapers: ${Object.keys(scrapers).join(', ')}`);
   console.log(`Sohu scraper: POST http://localhost:${PORT}/api/scrape/sohu`);
   console.log(`Gamelook scraper: POST http://localhost:${PORT}/api/scrape/gamelook`);
+  console.log(`9Game scraper: POST http://localhost:${PORT}/api/scrape/9game`);
 });
