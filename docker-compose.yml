@@ -1,6 +1,7 @@
 services:
-  sohu-scraper:
+  webscrapper:
     build: .
+    image: lamtran15122003/webscrapper:latest
     ports:
       - "3000:3000"
     environment:
