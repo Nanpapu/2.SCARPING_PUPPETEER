@@ -12,8 +12,8 @@ const SCRAPER_CONFIG = {
     description: 'meta[name="description"]'
   },
   TIMEOUTS: {
-    PAGE_LOAD: 30000,
-    DETAIL_LOAD: 15000,
+    PAGE_LOAD: 300000,
+    DETAIL_LOAD: 150000,
     WAIT_AFTER_LOAD: 3000,
     WAIT_AFTER_DETAIL: 2000,
     BATCH_DELAY: 2000,
