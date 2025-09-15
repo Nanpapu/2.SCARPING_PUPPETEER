@@ -230,6 +230,13 @@ class TapTapRankingScraper {
               }
             }
 
+            // Extract image
+            let image = null;
+            const imageElement = gameElement.querySelector(selectors.image);
+            if (imageElement && imageElement.src) {
+              image = imageElement.src;
+            }
+
             // Add game if we have at least title
             if (title) {
               results.push({
@@ -239,6 +246,7 @@ class TapTapRankingScraper {
                 rating: rating || 'N/A',
                 category: category || 'N/A',
                 gameLink: gameLink || 'N/A',
+                image: image || 'N/A',
                 page: pageNum
               });
             }

@@ -105,7 +105,8 @@ const SCRAPER_CONFIGS = {
       rating: 'div.tap-rating__number.rate-number-font',
       category_primary: 'div.tap-text.tap-text__one-line.caption-m12-w12.gray-06.app-row-card__hint',
       category_tags: 'div.tap-label-tag-group.flex.tap-ellipsis.group--adjust.game-cell__tags a',
-      game_link: 'a.tap-router.tap-router__prefetched.inline-flex.game-cell__icon'
+      game_link: 'a.tap-router.tap-router__prefetched.inline-flex.game-cell__icon',
+      image: 'a.tap-router.tap-router__prefetched.inline-flex.game-cell__icon div.tap-image-wrapper.app-icon.tap-avatar.tap-avatar--small.app-icon__img-hover img'
     },
     INFINITE_SCROLL: {
       SCROLL_DELAY: 2000,
