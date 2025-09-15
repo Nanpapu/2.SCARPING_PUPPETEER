@@ -110,7 +110,8 @@ const SCRAPER_CONFIGS = {
       category_primary: 'div.tap-text.tap-text__one-line.caption-m12-w12.gray-06.app-row-card__hint',
       category_tags: 'div.tap-label-tag-group.flex.tap-ellipsis.group--adjust.game-cell__tags a',
       game_link: 'a.tap-router.tap-router__prefetched.inline-flex.game-cell__icon',
-      image: 'a.tap-router.tap-router__prefetched.inline-flex.game-cell__icon div.tap-image-wrapper.app-icon.tap-avatar.tap-avatar--small.app-icon__img-hover img'
+      image: 'a.tap-router.tap-router__prefetched.inline-flex.game-cell__icon div.tap-image-wrapper.app-icon.tap-avatar.tap-avatar--small.app-icon__img-hover img',
+      image_fallback: 'img[data-v-b7568bee].tap-image.app-icon__img'
     },
     DETAILS_SELECTORS: {
       release_date: 'div.tap-text.tap-text__one-line.single-info__content__value.gray-07[data-v-0e365061]'

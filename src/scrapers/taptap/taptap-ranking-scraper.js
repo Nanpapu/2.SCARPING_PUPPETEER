@@ -175,9 +175,17 @@ class TapTapRankingScraper {
       logger.info(`Warning: Could not load all pages up to page ${scrollToPage} after ${scrollAttempts} attempts`);
     }
 
-    // Wait 10 seconds to ensure all content is fully loaded
-    logger.info(`Waiting 10 seconds to ensure all content is fully loaded...`);
-    await page.waitForTimeout(10000);
+    // Wait 15 seconds to ensure all content and images are fully loaded
+    logger.info(`Waiting 15 seconds to ensure all content and images are fully loaded...`);
+    await page.waitForTimeout(15000);
+
+    // Additional wait for images to load
+    try {
+      await page.waitForSelector('img[data-v-b7568bee]', { timeout: 5000 });
+      logger.info('Images with data-v-b7568bee found');
+    } catch (error) {
+      logger.info('Warning: Could not find images with data-v-b7568bee, proceeding anyway');
+    }
 
     // Now extract all games from loaded pages
     logger.info(`Extracting games from all loaded pages...`);
@@ -287,11 +295,24 @@ class TapTapRankingScraper {
               }
             }
 
-            // Extract image
+            // Extract image with multiple selectors
             let image = null;
-            const imageElement = gameElement.querySelector(selectors.image);
-            if (imageElement && imageElement.src) {
-              image = imageElement.src;
+            const imageSelectors = [
+              selectors.image,
+              selectors.image_fallback,
+              'img[data-v-b7568bee]',
+              'img.tap-image.app-icon__img',
+              'img.app-icon__img',
+              '.tap-image-wrapper img',
+              '.app-icon img'
+            ];
+
+            for (const imageSelector of imageSelectors) {
+              const imageElement = gameElement.querySelector(imageSelector);
+              if (imageElement && imageElement.src) {
+                image = imageElement.src;
+                break;
+              }
             }
 
             // Add game if we have at least title
