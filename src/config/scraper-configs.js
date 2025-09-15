@@ -108,6 +108,9 @@ const SCRAPER_CONFIGS = {
       game_link: 'a.tap-router.tap-router__prefetched.inline-flex.game-cell__icon',
       image: 'a.tap-router.tap-router__prefetched.inline-flex.game-cell__icon div.tap-image-wrapper.app-icon.tap-avatar.tap-avatar--small.app-icon__img-hover img'
     },
+    DETAILS_SELECTORS: {
+      release_date: 'div.tap-text.tap-text__one-line.single-info__content__value.gray-07[data-v-0e365061]'
+    },
     INFINITE_SCROLL: {
       SCROLL_DELAY: 2000,
       WAIT_FOR_LOAD: 1000,
@@ -118,6 +121,9 @@ const SCRAPER_CONFIGS = {
       PAGE_LOAD: 120000,
       WAIT_AFTER_LOAD: 8000,
       SCROLL_TIMEOUT: 10000,
+      RETRY_DELAY: 2000,
+      DETAIL_LOAD: 60000,
+      WAIT_AFTER_DETAIL: 3000,
       BATCH_DELAY: 2000
     }
   }

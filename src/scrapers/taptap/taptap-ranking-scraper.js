@@ -54,10 +54,44 @@ class TapTapRankingScraper {
         const limitedGames = allGames.slice(0, this.config.TARGET_RANK);
         logger.info(`Collected ${limitedGames.length} games (target: ${this.config.TARGET_RANK})`);
 
-        const result = this.formatResult(limitedGames);
+        // Extract release dates in batches
+        logger.info(`Extracting release dates in batches of ${this.config.BATCH_SIZE}...`);
+        const detailedGames = [];
+
+        for (let i = 0; i < limitedGames.length; i += this.config.BATCH_SIZE) {
+          const batch = limitedGames.slice(i, i + this.config.BATCH_SIZE);
+          logger.info(`Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(limitedGames.length / this.config.BATCH_SIZE)} (${batch.length} games)`);
+
+          const batchPromises = batch.map(async (game, index) => {
+            try {
+              logger.info(`  Processing game ${i + index + 1}/${limitedGames.length}: ${game.title}`);
+              const releaseDate = await this.extractReleaseDate(game.gameLink, logger);
+              return {
+                ...game,
+                releaseDate: releaseDate
+              };
+            } catch (error) {
+              logger.error(`  Failed to extract release date from ${game.gameLink}:${error.message ? ": " + error.message : ""}`);
+              return {
+                ...game,
+                releaseDate: null
+              };
+            }
+          });
+
+          const batchResults = await Promise.all(batchPromises);
+          detailedGames.push(...batchResults);
+
+          if (i + this.config.BATCH_SIZE < limitedGames.length) {
+            logger.info(`  Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
+            await new Promise(resolve => setTimeout(resolve, this.timeouts.BATCH_DELAY));
+          }
+        }
+
+        const result = this.formatResult(detailedGames);
         await this.saveToFile(result);
 
-        logger.info(`Successfully scraped ${limitedGames.length} games`);
+        logger.info(`Successfully scraped ${limitedGames.length} games with release dates`);
         return result;
 
       } catch (error) {
@@ -418,6 +452,53 @@ class TapTapRankingScraper {
     // Results saved message will be logged by the main server
     
     return filename;
+  }
+
+  async extractReleaseDate(gameLink, logger = console) {
+    if (!gameLink || gameLink === 'N/A') {
+      return null;
+    }
+
+    const tabInfo = await browserManager.getAvailableTab('taptap-detail');
+    const { tabId, page } = tabInfo;
+
+    try {
+      await page.goto(gameLink, {
+        waitUntil: 'domcontentloaded',
+        timeout: this.timeouts.DETAIL_LOAD
+      });
+
+      await page.waitForTimeout(this.timeouts.WAIT_AFTER_DETAIL);
+
+      const releaseDate = await page.evaluate((primarySelector) => {
+        // Try multiple selectors for release date
+        const selectors = [
+          primarySelector,
+          'div.tap-text.tap-text__one-line.single-info__content__value.gray-07',
+          'div[data-v-0e365061]',
+          '.single-info__content__value'
+        ];
+
+        for (const selector of selectors) {
+          const elements = document.querySelectorAll(selector);
+
+          // Look for date pattern in text content
+          for (const element of elements) {
+            const text = element.textContent.trim();
+            // Match YYYY-MM-DD pattern
+            if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+              return text;
+            }
+          }
+        }
+
+        return null;
+      }, this.config.DETAILS_SELECTORS.release_date);
+
+      return releaseDate;
+    } finally {
+      await browserManager.releaseTab(tabId);
+    }
   }
 }
 
