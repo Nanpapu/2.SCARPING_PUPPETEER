@@ -4,6 +4,7 @@ const SohuScraper = require('./scrapers/sohu/sohu-scraper');
 const GamelookScraper = require('./scrapers/gamelook/gamelook-scraper');
 const NineGameRankingListScraper = require('./scrapers/9game/9game-ranking-list-scraper');
 const GnnQuickScraper = require('./scrapers/gnn/gnn-quick-scraper');
+const TapTapRankingScraper = require('./scrapers/taptap/taptap-ranking-scraper');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,7 +16,8 @@ const scrapers = {
   sohu: new SohuScraper(),
   gamelook: new GamelookScraper(),
   '9game': new NineGameRankingListScraper(),
-  gnn: new GnnQuickScraper()
+  gnn: new GnnQuickScraper(),
+  taptap: new TapTapRankingScraper()
 };
 
 app.get('/health', (req, res) => {
@@ -119,6 +121,29 @@ app.post('/api/scrape/gnn', async (req, res) => {
   }
 });
 
+app.post('/api/scrape/taptap', async (req, res) => {
+  try {
+    console.log('[SERVER] TapTap manual scrape triggered');
+    const result = await scrapers.taptap.scrape();
+    
+    res.json({
+      success: true,
+      message: 'TapTap scraping completed successfully',
+      scraper: 'taptap',
+      data: result
+    });
+  } catch (error) {
+    console.error('[SERVER] TapTap scraping failed:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      message: 'TapTap scraping failed',
+      scraper: 'taptap',
+      error: error.message
+    });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Multi-website scraper server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
@@ -127,4 +152,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Gamelook scraper: POST http://localhost:${PORT}/api/scrape/gamelook`);
   console.log(`9Game scraper: POST http://localhost:${PORT}/api/scrape/9game`);
   console.log(`GNN scraper: POST http://localhost:${PORT}/api/scrape/gnn`);
+  console.log(`TapTap scraper: POST http://localhost:${PORT}/api/scrape/taptap`);
 });

@@ -89,6 +89,31 @@ const SCRAPER_CONFIGS = {
     CUSTOM_TIMEOUTS: {
       PAGE_LOAD: 60000
     }
+  },
+
+  taptap: {
+    BATCH_SIZE: 10,
+    MAX_RETRIES: 3,
+    TARGET_URL: 'https://www.taptap.cn/top/download?os=pc',
+    TARGET_RANK: 50,
+    ITEMS_PER_SCROLL: 10,
+    RANKING_SELECTORS: {
+      rank: 'span[class*="data-v-ea802df3"]',
+      title: 'div.text-with-tags.app-title span',
+      rating: 'div.tap-rating__number.rate-number-font',
+      category_primary: 'div.tap-text.tap-text__one-line.caption-m12-w12.gray-06.app-row-card__hint',
+      category_tags: 'div.tap-label-tag-group.flex.tap-ellipsis.group--adjust.game-cell__tags a'
+    },
+    INFINITE_SCROLL: {
+      SCROLL_DELAY: 3000,
+      WAIT_FOR_LOAD: 2000,
+      MAX_SCROLL_ATTEMPTS: 10
+    },
+    CUSTOM_TIMEOUTS: {
+      PAGE_LOAD: 60000,
+      SCROLL_TIMEOUT: 5000,
+      BATCH_DELAY: 1000
+    }
   }
 };
 
