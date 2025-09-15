@@ -1,92 +1,38 @@
-// 9GAME.CN RANKING LIST SCRAPER CONFIGURATION
-const SCRAPER_CONFIG = {
-  BATCH_SIZE: 20,
-  MAX_RETRIES: 3,
-  TARGET_URL: 'https://www.9game.cn/xyrb/?spm=aligames_platform_ug.ng_seo.0.0.36d769b18t8wzl',
-  RANKING_SELECTORS: {
-    rank: 'td.num span.n',
-    link: 'td.name a'
-  },
-  DETAILS_SELECTORS: {
-    // For released games
-    released: {
-      namegame: [
-        'div[class^="ng-pc-materials__topbanner--title"]',
-        'h1.tit.cn',
-        'a[data-spm-protocol][data-spm-anchor-id]:not([href*="tag"])'
-      ],
-      day: 'div[class^="ng-pc-materials__topbanner--timeline_content_small"]',
-      anh: 'img[class*="ng-pc-materials__topbanner--icon_game"]',
-      theloai: 'div[class^="ng-pc-materials__topbanner--tag_text"]',
-      description: 'div.ng-pc-materials__topbanner--description_box_small--3ImkWfE'
-    },
-    // For unreleased games
-    unreleased: {
-      namegame: 'h1.ngame-title a',
-      day: 'div[class^="ng-pc-materials__topbanner--timeline_content_small"]',
-      anh: 'ul.focus-img li[style*="display: list-item"] img',
-      theloai: 'div.ngame-types span.point',
-      description: 'div.ng-pc-materials__topbanner--description_box_small--3ImkWfE'
-    }
-  },
-  TIMEOUTS: {
-    PAGE_LOAD: 300000,
-    DETAIL_LOAD: 300000,
-    WAIT_AFTER_LOAD: 3000,
-    WAIT_AFTER_DETAIL: 2000,
-    BATCH_DELAY: 2000,
-    RETRY_DELAY: 2000
-  },
-  USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  USE_PUPPETEER: true
-};
-
-const puppeteer = require('puppeteer');
+const SCRAPER_CONFIGS = require('../../config/scraper-configs');
+const PUPPETEER_CONFIG = require('../../config/puppeteer-config');
+const browserManager = require('../../utils/browser-manager');
 const fs = require('fs');
 const path = require('path');
 
 class NineGameRankingListScraper {
   constructor() {
-    this.config = SCRAPER_CONFIG;
+    this.config = SCRAPER_CONFIGS['9game'];
+    this.timeouts = {
+      ...PUPPETEER_CONFIG.GLOBAL_TIMEOUTS,
+      ...this.config.CUSTOM_TIMEOUTS
+    };
   }
 
   async scrape() {
-    let browser = null;
+    let tabId = null;
+    let page = null;
     let attempt = 1;
 
     while (attempt <= this.config.MAX_RETRIES) {
       try {
         console.log(`[9GAME] Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
         
-        browser = await puppeteer.launch({
-          headless: 'new',
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--disable-gpu',
-            '--disable-features=VizDisplayCompositor',
-            '--disable-extensions',
-            '--disable-default-apps',
-            '--disable-sync'
-          ].concat(process.env.NODE_ENV === 'development' ? [] : ['--no-zygote', '--single-process']),
-          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
-        });
-
-        const page = await browser.newPage();
-        
-        await page.setUserAgent(this.config.USER_AGENT);
-        await page.setViewport({ width: 1366, height: 768 });
+        const tabInfo = await browserManager.getAvailableTab('9game');
+        tabId = tabInfo.tabId;
+        page = tabInfo.page;
 
         console.log('[9GAME] Loading ranking page...');
         await page.goto(this.config.TARGET_URL, { 
           waitUntil: 'domcontentloaded',
-          timeout: this.config.TIMEOUTS.PAGE_LOAD 
+          timeout: this.timeouts.PAGE_LOAD 
         });
 
-        await page.waitForTimeout(this.config.TIMEOUTS.WAIT_AFTER_LOAD);
+        await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
 
         console.log('[9GAME] Extracting ranking data...');
         const rankingData = await this.extractRankingData(page);
@@ -105,7 +51,7 @@ class NineGameRankingListScraper {
           const batchPromises = batch.map(async (item, index) => {
             try {
               console.log(`[9GAME]   Processing game ${i + index + 1}/${rankingData.length}: ${item.link}`);
-              const details = await this.extractGameDetails(browser, item.link);
+              const details = await this.extractGameDetails(item.link);
               return {
                 rank: item.rank,
                 link: item.link,
@@ -129,8 +75,8 @@ class NineGameRankingListScraper {
           detailedData.push(...batchResults);
           
           if (i + this.config.BATCH_SIZE < rankingData.length) {
-            console.log(`[9GAME]   Waiting ${this.config.TIMEOUTS.BATCH_DELAY}ms before next batch...`);
-            await new Promise(resolve => setTimeout(resolve, this.config.TIMEOUTS.BATCH_DELAY));
+            console.log(`[9GAME]   Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
+            await new Promise(resolve => setTimeout(resolve, this.timeouts.BATCH_DELAY));
           }
         }
 
@@ -148,10 +94,10 @@ class NineGameRankingListScraper {
         }
         
         attempt++;
-        await new Promise(resolve => setTimeout(resolve, this.config.TIMEOUTS.RETRY_DELAY));
+        await new Promise(resolve => setTimeout(resolve, this.timeouts.RETRY_DELAY));
       } finally {
-        if (browser) {
-          await browser.close();
+        if (tabId) {
+          await browserManager.releaseTab(tabId);
         }
       }
     }
@@ -180,19 +126,17 @@ class NineGameRankingListScraper {
     return rankingData;
   }
 
-  async extractGameDetails(browser, url) {
-    const page = await browser.newPage();
+  async extractGameDetails(url) {
+    const tabInfo = await browserManager.getAvailableTab('9game-detail');
+    const { tabId, page } = tabInfo;
     
     try {
-      await page.setUserAgent(this.config.USER_AGENT);
-      await page.setViewport({ width: 1366, height: 768 });
-      
       await page.goto(url, { 
         waitUntil: 'domcontentloaded',
-        timeout: this.config.TIMEOUTS.DETAIL_LOAD
+        timeout: this.timeouts.DETAIL_LOAD
       });
       
-      await page.waitForTimeout(this.config.TIMEOUTS.WAIT_AFTER_DETAIL);
+      await page.waitForTimeout(this.timeouts.WAIT_AFTER_DETAIL);
 
       // First try released game selectors
       let details = await this.tryExtractDetails(page, this.config.DETAILS_SELECTORS.released, url);
@@ -205,7 +149,7 @@ class NineGameRankingListScraper {
 
       return details;
     } finally {
-      await page.close();
+      await browserManager.releaseTab(tabId);
     }
   }
 

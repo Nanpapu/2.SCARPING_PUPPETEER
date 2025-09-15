@@ -1,63 +1,30 @@
-// GAMELOOK.COM.CN SCRAPER CONFIGURATION
-const SCRAPER_CONFIG = {
-  BATCH_SIZE: 50,
-  MAX_RETRIES: 3,
-  START_PAGE: 1,
-  END_PAGE: 2,
-  BASE_URL: 'http://www.gamelook.com.cn',
-  PAGE_URL_TEMPLATE: 'http://www.gamelook.com.cn/page/{page}/',
-  LINKS_SELECTOR: 'h2.item-title a',
-  DETAILS_SELECTORS: {
-    title: 'h1',
-    image: 'div.entry img',
-    postingdate: 'span',
-    description: 'meta[name="description"]'
-  },
-  TIMEOUTS: {
-    PAGE_LOAD: 300000,
-    DETAIL_LOAD: 300000,
-    WAIT_AFTER_LOAD: 3000,
-    WAIT_AFTER_DETAIL: 5000,
-    BATCH_DELAY: 2000,
-    RETRY_DELAY: 2000
-  },
-  USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  USE_PUPPETEER: true
-};
-
-const puppeteer = require('puppeteer');
+const SCRAPER_CONFIGS = require('../../config/scraper-configs');
+const PUPPETEER_CONFIG = require('../../config/puppeteer-config');
+const browserManager = require('../../utils/browser-manager');
 const fs = require('fs');
 const path = require('path');
 
 class GamelookScraper {
   constructor() {
-    this.config = SCRAPER_CONFIG;
+    this.config = SCRAPER_CONFIGS.gamelook;
+    this.timeouts = {
+      ...PUPPETEER_CONFIG.GLOBAL_TIMEOUTS,
+      ...this.config.CUSTOM_TIMEOUTS
+    };
   }
 
   async scrape() {
-    let browser = null;
+    let tabId = null;
+    let page = null;
     let attempt = 1;
 
     while (attempt <= this.config.MAX_RETRIES) {
       try {
         console.log(`[GAMELOOK] Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
         
-        browser = await puppeteer.launch({
-          headless: 'new',
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--disable-gpu',
-            '--disable-features=VizDisplayCompositor',
-            '--disable-extensions',
-            '--disable-default-apps',
-            '--disable-sync'
-          ].concat(process.env.NODE_ENV === 'development' ? [] : ['--no-zygote', '--single-process']),
-          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
-        });
+        const tabInfo = await browserManager.getAvailableTab('gamelook');
+        tabId = tabInfo.tabId;
+        page = tabInfo.page;
 
         // Collect all links from multiple pages
         const allLinks = [];
@@ -65,7 +32,7 @@ class GamelookScraper {
           const pageUrl = this.config.PAGE_URL_TEMPLATE.replace('{page}', pageNum);
           console.log(`[GAMELOOK] Loading page ${pageNum}: ${pageUrl}`);
           
-          const pageLinks = await this.extractLinksFromPage(browser, pageUrl);
+          const pageLinks = await this.extractLinksFromPage(pageUrl);
           allLinks.push(...pageLinks);
           console.log(`[GAMELOOK] Found ${pageLinks.length} links from page ${pageNum}`);
         }
@@ -84,7 +51,7 @@ class GamelookScraper {
           const batchPromises = batch.map(async (link, index) => {
             try {
               console.log(`[GAMELOOK]   Processing link ${i + index + 1}/${allLinks.length}: ${link}`);
-              const details = await this.extractLinkDetails(browser, link);
+              const details = await this.extractLinkDetails(link);
               return details;
             } catch (error) {
               console.error(`[GAMELOOK]   Failed to extract details from ${link}:`, error.message);
@@ -102,8 +69,8 @@ class GamelookScraper {
           detailedData.push(...batchResults);
           
           if (i + this.config.BATCH_SIZE < allLinks.length) {
-            console.log(`[GAMELOOK]   Waiting ${this.config.TIMEOUTS.BATCH_DELAY}ms before next batch...`);
-            await new Promise(resolve => setTimeout(resolve, this.config.TIMEOUTS.BATCH_DELAY));
+            console.log(`[GAMELOOK]   Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
+            await new Promise(resolve => setTimeout(resolve, this.timeouts.BATCH_DELAY));
           }
         }
 
@@ -121,17 +88,18 @@ class GamelookScraper {
         }
         
         attempt++;
-        await new Promise(resolve => setTimeout(resolve, this.config.TIMEOUTS.RETRY_DELAY));
+        await new Promise(resolve => setTimeout(resolve, this.timeouts.RETRY_DELAY));
       } finally {
-        if (browser) {
-          await browser.close();
+        if (tabId) {
+          await browserManager.releaseTab(tabId);
         }
       }
     }
   }
 
-  async extractLinksFromPage(browser, pageUrl) {
-    const page = await browser.newPage();
+  async extractLinksFromPage(pageUrl) {
+    const tabInfo = await browserManager.getAvailableTab('gamelook-page');
+    const { tabId, page } = tabInfo;
     
     try {
       await page.setUserAgent(this.config.USER_AGENT);
@@ -139,10 +107,10 @@ class GamelookScraper {
       
       await page.goto(pageUrl, { 
         waitUntil: 'domcontentloaded',
-        timeout: this.config.TIMEOUTS.PAGE_LOAD 
+        timeout: this.timeouts.PAGE_LOAD 
       });
       
-      await page.waitForTimeout(this.config.TIMEOUTS.WAIT_AFTER_LOAD);
+      await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
 
       const links = await page.$$eval(this.config.LINKS_SELECTOR, (elements) => {
         return elements.map(el => el.href);
@@ -150,12 +118,13 @@ class GamelookScraper {
 
       return links;
     } finally {
-      await page.close();
+      await browserManager.releaseTab(tabId);
     }
   }
 
-  async extractLinkDetails(browser, url) {
-    const page = await browser.newPage();
+  async extractLinkDetails(url) {
+    const tabInfo = await browserManager.getAvailableTab('gamelook-detail');
+    const { tabId, page } = tabInfo;
     
     try {
       await page.setUserAgent(this.config.USER_AGENT);
@@ -163,10 +132,10 @@ class GamelookScraper {
       
       await page.goto(url, { 
         waitUntil: 'domcontentloaded',
-        timeout: this.config.TIMEOUTS.DETAIL_LOAD
+        timeout: this.timeouts.DETAIL_LOAD
       });
       
-      await page.waitForTimeout(this.config.TIMEOUTS.WAIT_AFTER_DETAIL);
+      await page.waitForTimeout(this.timeouts.WAIT_AFTER_DETAIL);
 
       const details = await page.evaluate((url, selectors) => {
         const getTextContent = (selector) => {
@@ -190,7 +159,7 @@ class GamelookScraper {
 
       return details;
     } finally {
-      await page.close();
+      await browserManager.releaseTab(tabId);
     }
   }
 

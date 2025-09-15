@@ -1,74 +1,38 @@
-// SOHU.COM SCRAPER CONFIGURATION
-const SCRAPER_CONFIG = {
-  BATCH_SIZE: 50,
-  MAX_RETRIES: 3,
-  TARGET_URL: 'https://www.sohu.com/',
-  LINKS_SELECTOR: 'ul.news[data-spm="top-news1"] a.titleStyle',
-  DETAILS_SELECTORS: {
-    title: 'h1',
-    time: 'span#news-time',
-    location: 'div.area > span:last-child',
-    image: 'img',
-    description: 'meta[name="description"]'
-  },
-  TIMEOUTS: {
-    PAGE_LOAD: 300000,
-    DETAIL_LOAD: 150000,
-    WAIT_AFTER_LOAD: 3000,
-    WAIT_AFTER_DETAIL: 2000,
-    BATCH_DELAY: 2000,
-    RETRY_DELAY: 2000
-  },
-  USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  USE_PUPPETEER: true
-};
-
-const puppeteer = require('puppeteer');
+const SCRAPER_CONFIGS = require('../../config/scraper-configs');
+const PUPPETEER_CONFIG = require('../../config/puppeteer-config');
+const browserManager = require('../../utils/browser-manager');
 const fs = require('fs');
 const path = require('path');
 
 class SohuScraper {
   constructor() {
-    this.config = SCRAPER_CONFIG;
+    this.config = SCRAPER_CONFIGS.sohu;
+    this.timeouts = {
+      ...PUPPETEER_CONFIG.GLOBAL_TIMEOUTS,
+      ...this.config.CUSTOM_TIMEOUTS
+    };
   }
 
   async scrape() {
-    let browser = null;
+    let tabId = null;
+    let page = null;
     let attempt = 1;
 
     while (attempt <= this.config.MAX_RETRIES) {
       try {
         console.log(`[SOHU] Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
         
-        browser = await puppeteer.launch({
-          headless: 'new',
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--disable-gpu',
-            '--disable-features=VizDisplayCompositor',
-            '--disable-extensions',
-            '--disable-default-apps',
-            '--disable-sync'
-          ].concat(process.env.NODE_ENV === 'development' ? [] : ['--no-zygote', '--single-process']),
-          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
-        });
-
-        const page = await browser.newPage();
-        
-        await page.setUserAgent(this.config.USER_AGENT);
-        await page.setViewport({ width: 1366, height: 768 });
+        const tabInfo = await browserManager.getAvailableTab('sohu');
+        tabId = tabInfo.tabId;
+        page = tabInfo.page;
 
         console.log('[SOHU] Loading sohu.com...');
         await page.goto(this.config.TARGET_URL, { 
           waitUntil: 'domcontentloaded',
-          timeout: this.config.TIMEOUTS.PAGE_LOAD 
+          timeout: this.timeouts.PAGE_LOAD 
         });
 
-        await page.waitForTimeout(this.config.TIMEOUTS.WAIT_AFTER_LOAD);
+        await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
 
         console.log('[SOHU] Extracting links...');
         const links = await page.$$eval(this.config.LINKS_SELECTOR, (elements) => {
@@ -89,7 +53,7 @@ class SohuScraper {
           const batchPromises = batch.map(async (link, index) => {
             try {
               console.log(`[SOHU]   Processing link ${i + index + 1}/${links.length}: ${link}`);
-              const details = await this.extractLinkDetails(browser, link);
+              const details = await this.extractLinkDetails(link);
               return details;
             } catch (error) {
               console.error(`[SOHU]   Failed to extract details from ${link}:`, error.message);
@@ -108,8 +72,8 @@ class SohuScraper {
           detailedData.push(...batchResults);
           
           if (i + this.config.BATCH_SIZE < links.length) {
-            console.log(`[SOHU]   Waiting ${this.config.TIMEOUTS.BATCH_DELAY}ms before next batch...`);
-            await new Promise(resolve => setTimeout(resolve, this.config.TIMEOUTS.BATCH_DELAY));
+            console.log(`[SOHU]   Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
+            await new Promise(resolve => setTimeout(resolve, this.timeouts.BATCH_DELAY));
           }
         }
 
@@ -127,28 +91,26 @@ class SohuScraper {
         }
         
         attempt++;
-        await new Promise(resolve => setTimeout(resolve, this.config.TIMEOUTS.RETRY_DELAY));
+        await new Promise(resolve => setTimeout(resolve, this.timeouts.RETRY_DELAY));
       } finally {
-        if (browser) {
-          await browser.close();
+        if (tabId) {
+          await browserManager.releaseTab(tabId);
         }
       }
     }
   }
 
-  async extractLinkDetails(browser, url) {
-    const page = await browser.newPage();
+  async extractLinkDetails(url) {
+    const tabInfo = await browserManager.getAvailableTab('sohu-detail');
+    const { tabId, page } = tabInfo;
     
     try {
-      await page.setUserAgent(this.config.USER_AGENT);
-      await page.setViewport({ width: 1366, height: 768 });
-      
       await page.goto(url, { 
         waitUntil: 'domcontentloaded',
-        timeout: this.config.TIMEOUTS.DETAIL_LOAD 
+        timeout: this.timeouts.DETAIL_LOAD 
       });
       
-      await page.waitForTimeout(this.config.TIMEOUTS.WAIT_AFTER_DETAIL);
+      await page.waitForTimeout(this.timeouts.WAIT_AFTER_DETAIL);
 
       const details = await page.evaluate((url, selectors) => {
         const getTextContent = (selector) => {
@@ -173,7 +135,7 @@ class SohuScraper {
 
       return details;
     } finally {
-      await page.close();
+      await browserManager.releaseTab(tabId);
     }
   }
 

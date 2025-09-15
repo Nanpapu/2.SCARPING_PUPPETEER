@@ -1,65 +1,32 @@
-// GNN.GAMER.COM.TW QUICK SCRAPER CONFIGURATION - LINKS ONLY
-const SCRAPER_CONFIG = {
-  BATCH_SIZE: 25,
-  MAX_RETRIES: 3,
-  CATEGORIES: [
-    { url: 'https://gnn.gamer.com.tw/index.php?k=4', source: '手機' },
-    { url: 'https://gnn.gamer.com.tw/index.php?k=1', source: 'PC' },
-    { url: 'https://gnn.gamer.com.tw/index.php?k=3', source: 'TV 掌機' },
-    { url: 'https://gnn.gamer.com.tw/index.php?k=5', source: '動漫畫' },
-    { url: 'https://gnn.gamer.com.tw/index.php?k=13', source: '電競' },
-    { url: 'https://gnn.gamer.com.tw/index.php?k=11', source: '活動展覽' },
-    { url: 'https://gnn.gamer.com.tw/index.php?k=9', source: '主題報導' }
-  ],
-  LINKS_SELECTOR: 'a[href*="gnn.gamer.com.tw/detail.php?sn="]',
-  TIMEOUTS: {
-    PAGE_LOAD: 60000,
-    WAIT_AFTER_LOAD: 3000,
-    RETRY_DELAY: 2000
-  },
-  USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  USE_PUPPETEER: true
-};
-
-const puppeteer = require('puppeteer');
+const SCRAPER_CONFIGS = require('../../config/scraper-configs');
+const PUPPETEER_CONFIG = require('../../config/puppeteer-config');
+const browserManager = require('../../utils/browser-manager');
 const fs = require('fs');
 const path = require('path');
 
 class GnnQuickScraper {
   constructor() {
-    this.config = SCRAPER_CONFIG;
+    this.config = SCRAPER_CONFIGS.gnn;
+    this.timeouts = {
+      ...PUPPETEER_CONFIG.GLOBAL_TIMEOUTS,
+      ...this.config.CUSTOM_TIMEOUTS
+    };
   }
 
   async scrape() {
-    let browser = null;
+    let tabId = null;
+    let page = null;
     let attempt = 1;
 
     while (attempt <= this.config.MAX_RETRIES) {
       try {
         console.log(`[GNN-QUICK] Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
-        
-        browser = await puppeteer.launch({
-          headless: 'new',
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--disable-gpu',
-            '--disable-features=VizDisplayCompositor',
-            '--disable-extensions',
-            '--disable-default-apps',
-            '--disable-sync'
-          ].concat(process.env.NODE_ENV === 'development' ? [] : ['--no-zygote', '--single-process']),
-          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
-        });
 
         // Collect all links from all categories in parallel
         console.log(`[GNN-QUICK] Processing all ${this.config.CATEGORIES.length} categories in parallel...`);
         const categoryPromises = this.config.CATEGORIES.map(async (category) => {
           console.log(`[GNN-QUICK] Starting category: ${category.source}`);
-          const categoryLinks = await this.extractLinksFromCategory(browser, category);
+          const categoryLinks = await this.extractLinksFromCategory(category);
           console.log(`[GNN-QUICK] Found ${categoryLinks.length} links from ${category.source}`);
           return categoryLinks;
         });
@@ -118,28 +85,29 @@ class GnnQuickScraper {
         }
         
         attempt++;
-        await new Promise(resolve => setTimeout(resolve, this.config.TIMEOUTS.RETRY_DELAY));
+        await new Promise(resolve => setTimeout(resolve, this.timeouts.RETRY_DELAY));
       } finally {
-        if (browser) {
-          await browser.close();
+        if (tabId) {
+          await browserManager.releaseTab(tabId);
         }
       }
     }
   }
 
-  async extractLinksFromCategory(browser, category) {
-    const page = await browser.newPage();
+  async extractLinksFromCategory(category) {
+    const tabInfo = await browserManager.getAvailableTab('gnn-category');
+    const { tabId, page } = tabInfo;
     
     try {
-      await page.setUserAgent(this.config.USER_AGENT);
-      await page.setViewport({ width: 1366, height: 768 });
+      await page.setUserAgent(PUPPETEER_CONFIG.DEFAULT_USER_AGENT);
+      await page.setViewport(PUPPETEER_CONFIG.DEFAULT_VIEWPORT);
       
       await page.goto(category.url, { 
         waitUntil: 'domcontentloaded',
-        timeout: this.config.TIMEOUTS.PAGE_LOAD 
+        timeout: this.timeouts.PAGE_LOAD 
       });
       
-      await page.waitForTimeout(this.config.TIMEOUTS.WAIT_AFTER_LOAD);
+      await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
 
       const links = await page.$$eval(this.config.LINKS_SELECTOR, (elements) => {
         return elements.map(el => el.href);
@@ -151,7 +119,7 @@ class GnnQuickScraper {
         source: category.source
       }));
     } finally {
-      await page.close();
+      await browserManager.releaseTab(tabId);
     }
   }
 
