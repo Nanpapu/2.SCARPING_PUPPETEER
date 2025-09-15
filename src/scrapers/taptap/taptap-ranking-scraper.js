@@ -27,12 +27,21 @@ class TapTapRankingScraper {
         page = tabInfo.page;
 
         console.log('[TAPTAP] Loading ranking page...');
-        await page.goto(this.config.TARGET_URL, { 
-          waitUntil: 'domcontentloaded',
-          timeout: this.timeouts.PAGE_LOAD 
+        await page.goto(this.config.TARGET_URL, {
+          waitUntil: 'networkidle0',
+          timeout: this.timeouts.PAGE_LOAD
         });
 
+        console.log('[TAPTAP] Page loaded, waiting for content...');
         await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
+
+        // Try to wait for some content to appear
+        try {
+          await page.waitForSelector('body', { timeout: 5000 });
+          console.log('[TAPTAP] Body element found');
+        } catch (error) {
+          console.log('[TAPTAP] Warning: Could not find body element');
+        }
 
         console.log(`[TAPTAP] Scrolling to load ${this.config.TARGET_RANK} games...`);
         const allGames = await this.scrollAndCollectGames(page);
@@ -69,59 +78,221 @@ class TapTapRankingScraper {
   }
 
   async scrollAndCollectGames(page) {
-    const allGames = [];
+    console.log(`[TAPTAP] Fast scrolling to load pages 1-${this.config.TARGET_PAGE}...`);
+
+    // Fast scroll until we have all pages loaded
     let scrollAttempts = 0;
-    let lastGameCount = 0;
-    let noChangeCount = 0;
+    let targetPageFound = false;
 
-    while (allGames.length < this.config.TARGET_RANK && scrollAttempts < this.config.INFINITE_SCROLL.MAX_SCROLL_ATTEMPTS) {
-      console.log(`[TAPTAP] Scroll attempt ${scrollAttempts + 1}, current games: ${allGames.length}/${this.config.TARGET_RANK}`);
+    while (!targetPageFound && scrollAttempts < this.config.INFINITE_SCROLL.MAX_SCROLL_ATTEMPTS) {
+      console.log(`[TAPTAP] Fast scroll attempt ${scrollAttempts + 1}`);
 
-      // Extract current games on page
-      const currentGames = await this.extractGamesFromPage(page);
-      
-      // Add new games (avoid duplicates by rank)
-      const existingRanks = new Set(allGames.map(game => game.rank));
-      const newGames = currentGames.filter(game => !existingRanks.has(game.rank));
-      
-      allGames.push(...newGames);
-      console.log(`[TAPTAP] Found ${newGames.length} new games, total: ${allGames.length}`);
+      // Check current pages loaded
+      const currentPages = await page.evaluate((targetPage) => {
+        const pages = [];
+        for (let i = 1; i <= targetPage; i++) {
+          const pageElements = document.querySelectorAll(`div.list-item[data-page="${i}"]`);
+          if (pageElements.length > 0) {
+            pages.push({ page: i, count: pageElements.length });
+          }
+        }
+        return pages;
+      }, this.config.TARGET_PAGE);
 
-      // Check if we have enough games
-      if (allGames.length >= this.config.TARGET_RANK) {
-        console.log(`[TAPTAP] Reached target rank ${this.config.TARGET_RANK}`);
+      console.log(`[TAPTAP] Current loaded pages:`, currentPages.map(p => `page ${p.page}: ${p.count} items`).join(', '));
+
+      // Check if target page is loaded
+      if (currentPages.length === this.config.TARGET_PAGE && currentPages[currentPages.length - 1].page === this.config.TARGET_PAGE) {
+        console.log(`[TAPTAP] All pages 1-${this.config.TARGET_PAGE} loaded successfully!`);
+        targetPageFound = true;
         break;
       }
 
-      // Check if no new games were loaded
-      if (allGames.length === lastGameCount) {
-        noChangeCount++;
-        if (noChangeCount >= 3) {
-          console.log('[TAPTAP] No new games loaded for 3 attempts, stopping scroll');
-          break;
-        }
-      } else {
-        noChangeCount = 0;
-      }
+      // Fast scroll down
+      await page.evaluate((scrollPixels) => {
+        window.scrollBy(0, scrollPixels);
+      }, this.config.INFINITE_SCROLL.FAST_SCROLL_PIXELS);
 
-      lastGameCount = allGames.length;
-
-      // Scroll down to load more
-      await page.evaluate(() => {
-        window.scrollTo(0, document.body.scrollHeight);
-      });
-
-      // Wait for new content to load
-      await page.waitForTimeout(this.config.INFINITE_SCROLL.SCROLL_DELAY);
+      // Short wait for content load
+      await page.waitForTimeout(this.config.INFINITE_SCROLL.WAIT_FOR_LOAD);
       scrollAttempts++;
     }
+
+    if (!targetPageFound) {
+      console.log(`[TAPTAP] Warning: Could not load all pages after ${scrollAttempts} attempts`);
+    }
+
+    // Now extract all games from loaded pages
+    console.log(`[TAPTAP] Extracting games from all loaded pages...`);
+    const allGames = await this.extractAllGamesFromPages(page);
 
     return allGames;
   }
 
+  async extractAllGamesFromPages(page) {
+    const allGames = await page.evaluate((containerSelector, selectors, targetPage) => {
+      const results = [];
+
+      // Extract from each page 1 to targetPage
+      for (let pageNum = 1; pageNum <= targetPage; pageNum++) {
+        const pageSelector = `${containerSelector}[data-page="${pageNum}"]`;
+        const gameElements = document.querySelectorAll(pageSelector);
+
+        console.log(`Processing page ${pageNum}: ${gameElements.length} games`);
+
+        gameElements.forEach((gameElement, index) => {
+          try {
+            // Calculate rank based on page and index
+            const rank = ((pageNum - 1) * 10) + (index + 1);
+
+            // Extract rank from element (fallback to calculated)
+            let displayRank = rank.toString();
+            const rankElement = gameElement.querySelector(selectors.rank) ||
+                              gameElement.querySelector('span[class*="rank"]') ||
+                              gameElement.querySelector('.rank') ||
+                              gameElement.querySelector('[class*="data-v-"]');
+            if (rankElement && rankElement.textContent.trim()) {
+              displayRank = rankElement.textContent.trim();
+            }
+
+            // Extract title with multiple fallbacks
+            let title = null;
+            const titleSelectors = [
+              selectors.title,
+              'div.text-with-tags.app-title',
+              '.app-title',
+              '.game-title',
+              'h3', 'h2', 'h1',
+              '[class*="title"]',
+              '[class*="name"]',
+              'a[href*="/app/"]'
+            ];
+
+            for (const titleSelector of titleSelectors) {
+              const titleElement = gameElement.querySelector(titleSelector);
+              if (titleElement && titleElement.textContent.trim()) {
+                title = titleElement.textContent.trim();
+                break;
+              }
+            }
+
+            // Extract rating
+            let rating = null;
+            const ratingSelectors = [
+              selectors.rating,
+              'div[class*="rating"]',
+              'span[class*="rating"]',
+              '.rate-number',
+              '[class*="score"]'
+            ];
+
+            for (const ratingSelector of ratingSelectors) {
+              const ratingElement = gameElement.querySelector(ratingSelector);
+              if (ratingElement && ratingElement.textContent.trim()) {
+                rating = ratingElement.textContent.trim();
+                break;
+              }
+            }
+
+            // Extract category - try primary first
+            let category = null;
+            const categoryPrimaryElement = gameElement.querySelector(selectors.category_primary);
+            if (categoryPrimaryElement && categoryPrimaryElement.textContent.trim()) {
+              category = categoryPrimaryElement.textContent.trim();
+            } else {
+              // Try tags if primary not found
+              const categoryTagElements = gameElement.querySelectorAll(selectors.category_tags);
+              if (categoryTagElements.length > 0) {
+                const tags = Array.from(categoryTagElements)
+                  .map(el => el.textContent.trim())
+                  .filter(text => text);
+                if (tags.length > 0) {
+                  category = tags.join(', ');
+                }
+              }
+            }
+
+            // Extract game link
+            let gameLink = null;
+            const gameLinkSelectors = [
+              selectors.game_link,
+              'a.tap-router.tap-router__prefetched',
+              'a.game-cell__icon',
+              'a[class*="tap-router"]',
+              'a[href*="/app/"]'
+            ];
+
+            for (const linkSelector of gameLinkSelectors) {
+              const linkElement = gameElement.querySelector(linkSelector);
+              if (linkElement && linkElement.href) {
+                gameLink = linkElement.href;
+                break;
+              }
+            }
+
+            // Add game if we have at least title
+            if (title) {
+              results.push({
+                rank: displayRank,
+                calculatedRank: rank,
+                title: title,
+                rating: rating || 'N/A',
+                category: category || 'N/A',
+                gameLink: gameLink || 'N/A',
+                page: pageNum
+              });
+            }
+
+          } catch (error) {
+            console.error(`Error extracting game ${index + 1} from page ${pageNum}:`, error);
+          }
+        });
+      }
+
+      return results;
+    }, this.config.GAME_CONTAINER_SELECTOR, this.config.RANKING_SELECTORS, this.config.TARGET_PAGE);
+
+    console.log(`[TAPTAP] Extracted ${allGames.length} games from ${this.config.TARGET_PAGE} pages`);
+    return allGames;
+  }
+
   async extractGamesFromPage(page) {
+    // Debug: log page content first
+    const debugInfo = await page.evaluate(() => {
+      return {
+        title: document.title,
+        url: window.location.href,
+        bodyText: document.body.textContent.substring(0, 200),
+        allElements: document.querySelectorAll('*').length
+      };
+    });
+    console.log(`[TAPTAP] Page debug:`, JSON.stringify(debugInfo, null, 2));
+
     const games = await page.evaluate((selectors) => {
-      const gameElements = document.querySelectorAll('[data-testid^="app-card-"], .app-card, .game-item, .ranking-item');
+      // Try multiple selectors for game containers
+      const possibleSelectors = [
+        '[data-testid^="app-card-"]',
+        '.app-card',
+        '.game-item',
+        '.ranking-item',
+        '.game-card',
+        '.app-item',
+        '[class*="card"]',
+        '[class*="item"]',
+        '[class*="app"]',
+        '[class*="game"]'
+      ];
+
+      let gameElements = [];
+      for (const selector of possibleSelectors) {
+        gameElements = document.querySelectorAll(selector);
+        if (gameElements.length > 0) {
+          console.log('Found', gameElements.length, 'elements with selector:', selector);
+          break;
+        }
+      }
+
+      console.log('Total game elements found:', gameElements.length);
       const results = [];
 
       gameElements.forEach((gameElement, index) => {
@@ -138,14 +309,27 @@ class TapTapRankingScraper {
             rank = (index + 1).toString();
           }
 
-          // Extract title
+          // Extract title with more fallbacks
           let title = null;
-          const titleElement = gameElement.querySelector(selectors.title) ||
-                             gameElement.querySelector('.app-title') ||
-                             gameElement.querySelector('h3') ||
-                             gameElement.querySelector('[class*="title"]');
-          if (titleElement) {
-            title = titleElement.textContent.trim();
+          const titleSelectors = [
+            selectors.title,
+            'div.text-with-tags.app-title',
+            '.app-title',
+            '.game-title',
+            'h3',
+            'h2',
+            'h1',
+            '[class*="title"]',
+            '[class*="name"]',
+            'a[href*="/app/"]'
+          ];
+
+          for (const titleSelector of titleSelectors) {
+            const titleElement = gameElement.querySelector(titleSelector);
+            if (titleElement && titleElement.textContent.trim()) {
+              title = titleElement.textContent.trim();
+              break;
+            }
           }
 
           // Extract rating

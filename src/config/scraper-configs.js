@@ -97,22 +97,27 @@ const SCRAPER_CONFIGS = {
     TARGET_URL: 'https://www.taptap.cn/top/download?os=pc',
     TARGET_RANK: 50,
     ITEMS_PER_SCROLL: 10,
+    GAME_CONTAINER_SELECTOR: 'div.list-item',
+    TARGET_PAGE: 5,
     RANKING_SELECTORS: {
       rank: 'span[class*="data-v-ea802df3"]',
       title: 'div.text-with-tags.app-title span',
       rating: 'div.tap-rating__number.rate-number-font',
       category_primary: 'div.tap-text.tap-text__one-line.caption-m12-w12.gray-06.app-row-card__hint',
-      category_tags: 'div.tap-label-tag-group.flex.tap-ellipsis.group--adjust.game-cell__tags a'
+      category_tags: 'div.tap-label-tag-group.flex.tap-ellipsis.group--adjust.game-cell__tags a',
+      game_link: 'a.tap-router.tap-router__prefetched.inline-flex.game-cell__icon'
     },
     INFINITE_SCROLL: {
-      SCROLL_DELAY: 3000,
-      WAIT_FOR_LOAD: 2000,
-      MAX_SCROLL_ATTEMPTS: 10
+      SCROLL_DELAY: 2000,
+      WAIT_FOR_LOAD: 1000,
+      MAX_SCROLL_ATTEMPTS: 15,
+      FAST_SCROLL_PIXELS: 1000
     },
     CUSTOM_TIMEOUTS: {
-      PAGE_LOAD: 60000,
-      SCROLL_TIMEOUT: 5000,
-      BATCH_DELAY: 1000
+      PAGE_LOAD: 120000,
+      WAIT_AFTER_LOAD: 8000,
+      SCROLL_TIMEOUT: 10000,
+      BATCH_DELAY: 2000
     }
   }
 };
