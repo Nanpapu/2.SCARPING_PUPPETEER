@@ -29,6 +29,33 @@ class NineGameRankingListScraper {
         logger.info('Loading ranking page...');
         const startTime = Date.now();
 
+        // Set random user agent and headers to avoid blocking
+        const userAgents = [
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+        ];
+
+        const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+        await page.setUserAgent(randomUA);
+        logger.info(`[STEALTH] Using User-Agent: ${randomUA}`);
+
+        // Set additional headers to look more like real browser
+        await page.setExtraHTTPHeaders({
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'DNT': '1',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1'
+        });
+
         // Add request interception for timing
         await page.setRequestInterception(true);
         let requestCount = 0;
@@ -37,7 +64,11 @@ class NineGameRankingListScraper {
         page.on('request', (request) => {
           requestCount++;
           logger.info(`[NETWORK] Request #${requestCount}: ${request.method()} ${request.url().substring(0, 100)}...`);
-          request.continue();
+
+          // Add random delays to mimic human behavior
+          setTimeout(() => {
+            request.continue();
+          }, Math.random() * 100 + 50); // 50-150ms random delay
         });
 
         page.on('response', (response) => {
@@ -53,6 +84,19 @@ class NineGameRankingListScraper {
 
           const loadTime = Date.now() - startTime;
           logger.info(`[TIMING] Page loaded in ${loadTime}ms (${requestCount} requests, ${responseCount} responses)`);
+
+          // Add human-like behavior
+          logger.info('[STEALTH] Adding human-like interactions...');
+
+          // Random mouse movements
+          await page.mouse.move(Math.random() * 800 + 100, Math.random() * 600 + 100);
+          await page.waitForTimeout(Math.random() * 1000 + 500);
+
+          // Random scroll to simulate reading
+          await page.evaluate(() => {
+            window.scrollTo(0, Math.random() * 300);
+          });
+          await page.waitForTimeout(Math.random() * 1000 + 500);
 
         } catch (error) {
           const failTime = Date.now() - startTime;
@@ -130,8 +174,16 @@ class NineGameRankingListScraper {
           throw new Error(`Scraping failed after ${this.config.MAX_RETRIES} attempts: ${error.message}`);
         }
         
+        // Exponential backoff with jitter to avoid being blocked
+        const baseDelay = this.timeouts.RETRY_DELAY;
+        const exponentialDelay = baseDelay * Math.pow(2, attempt - 1);
+        const jitter = Math.random() * 1000;
+        const totalDelay = exponentialDelay + jitter;
+
+        logger.info(`[RETRY] Waiting ${Math.round(totalDelay)}ms before retry ${attempt + 1} (exponential backoff)`);
+
         attempt++;
-        await new Promise(resolve => setTimeout(resolve, this.timeouts.RETRY_DELAY));
+        await new Promise(resolve => setTimeout(resolve, totalDelay));
       } finally {
         if (tabId) {
           await browserManager.releaseTab(tabId);
@@ -402,6 +454,25 @@ class NineGameRankingListScraper {
         return Array.from(elements).map(el => el.textContent.trim()).filter(text => text);
       };
 
+      const getDescriptionFromMultiple = (selectorArray) => {
+        for (const selector of selectorArray) {
+          // Check if it's a meta tag
+          if (selector.includes('meta[name="description"]')) {
+            const element = document.querySelector(selector);
+            if (element && element.getAttribute('content')) {
+              const content = element.getAttribute('content').trim();
+              if (content) return [content];
+            }
+          } else {
+            // Regular text content extraction
+            const elements = document.querySelectorAll(selector);
+            const texts = Array.from(elements).map(el => el.textContent.trim()).filter(text => text);
+            if (texts.length > 0) return texts;
+          }
+        }
+        return [];
+      };
+
       // Extract namegame
       let namegame = null;
       if (Array.isArray(selectors.namegame)) {
@@ -414,7 +485,14 @@ class NineGameRankingListScraper {
       const day = getTextContent(selectors.day);
       const anh = getAttribute(selectors.anh, 'src');
       const theloai = getAllTextContent(selectors.theloai);
-      const description = getAllTextContent(selectors.description);
+
+      // Extract description with fallback selectors
+      let description = [];
+      if (Array.isArray(selectors.description)) {
+        description = getDescriptionFromMultiple(selectors.description);
+      } else {
+        description = getAllTextContent(selectors.description);
+      }
 
       return {
         namegame,

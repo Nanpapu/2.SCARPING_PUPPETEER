@@ -39,7 +39,7 @@ const SCRAPER_CONFIGS = {
   },
 
   '9game': {
-    BATCH_SIZE: 5,
+    BATCH_SIZE: 10,
     MAX_RETRIES: 3,
     TARGET_URL: 'https://www.9game.cn/xyrb/?spm=aligames_platform_ug.ng_seo.0.0.36d769b18t8wzl',
     RANKING_SELECTORS: {
@@ -58,21 +58,35 @@ const SCRAPER_CONFIGS = {
         day: 'div[class^="ng-pc-materials__topbanner--timeline_content_small"]',
         anh: 'img[class*="ng-pc-materials__topbanner--icon_game"]',
         theloai: 'div[class^="ng-pc-materials__topbanner--tag_text"]',
-        description: 'div.ng-pc-materials__topbanner--description_box_small--3ImkWfE'
+        description: [
+          'div.ng-pc-materials__topbanner--description_box_small--3ImkWfE',
+          'div.ngame-desc',
+          'div[class*="description"]',
+          'div.game-desc',
+          'div.desc',
+          'meta[name="description"]'
+        ]
       },
       unreleased: {
         namegame: 'h1.ngame-title a',
         day: 'div[class^="ng-pc-materials__topbanner--timeline_content_small"]',
         anh: 'ul.focus-img li[style*="display: list-item"] img',
         theloai: 'div.ngame-types span.point',
-        description: 'div.ng-pc-materials__topbanner--description_box_small--3ImkWfE'
+        description: [
+          'div.ngame-desc',
+          'div.ng-pc-materials__topbanner--description_box_small--3ImkWfE',
+          'div[class*="description"]',
+          'div.game-desc',
+          'div.desc',
+          'meta[name="description"]'
+        ]
       }
     },
     CUSTOM_TIMEOUTS: {
-      PAGE_LOAD: 30000,
-      DETAIL_LOAD: 30000,
-      WAIT_AFTER_LOAD: 1000,
-      WAIT_AFTER_DETAIL: 500,
+      PAGE_LOAD: 60000,
+      DETAIL_LOAD: 60000,
+      WAIT_AFTER_LOAD: 5000,
+      WAIT_AFTER_DETAIL: 5000,
       BATCH_DELAY: 500,
       SMART_WAIT_MAX: 30000,
       POLL_INTERVAL: 1000
