@@ -17,7 +17,7 @@ const PUPPETEER_CONFIG = {
   },
 
   TAB_MANAGEMENT: {
-    MAX_TABS: 8,
+    MAX_TABS_PER_BROWSER: 8, // Số tabs tối đa trong 1 browser
     TAB_REUSE_DELAY: 1000,
     TAB_CLOSE_DELAY: 500
   },

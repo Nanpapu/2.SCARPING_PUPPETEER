@@ -3,58 +3,76 @@ const PUPPETEER_CONFIG = require('../config/puppeteer-config');
 
 class BrowserManager {
   constructor() {
-    this.browser = null;
+    this.browsers = new Map();
     this.activeTabs = new Map();
-    this.tabQueue = [];
-    this.isInitialized = false;
+    this.browserCounter = 0;
   }
 
-  async init() {
-    if (this.isInitialized && this.browser) {
-      return this.browser;
+  async getAvailableBrowser() {
+    // Tìm browser có ít tabs nhất
+    let bestBrowser = null;
+    let minTabs = Infinity;
+    
+    for (const [browserId, browserInfo] of this.browsers) {
+      const tabCount = browserInfo.tabCount;
+      if (tabCount < PUPPETEER_CONFIG.TAB_MANAGEMENT.MAX_TABS_PER_BROWSER && tabCount < minTabs) {
+        bestBrowser = { browserId, ...browserInfo };
+        minTabs = tabCount;
+      }
     }
 
-    console.log('[BROWSER-MANAGER] Initializing shared browser instance...');
-    
-    const browserArgs = PUPPETEER_CONFIG.BROWSER_OPTIONS.args.concat(
-      process.env.NODE_ENV === 'development' ? [] : ['--no-zygote', '--single-process']
-    );
+    // Nếu không có browser phù hợp, tạo browser mới
+    if (!bestBrowser) {
+      const browserId = `browser_${++this.browserCounter}`;
+      console.log(`[BROWSER-MANAGER] Creating new browser ${browserId}...`);
+      
+      const browserArgs = PUPPETEER_CONFIG.BROWSER_OPTIONS.args.concat(
+        process.env.NODE_ENV === 'development' ? [] : ['--no-zygote', '--single-process']
+      );
 
-    this.browser = await puppeteer.launch({
-      ...PUPPETEER_CONFIG.BROWSER_OPTIONS,
-      args: browserArgs
-    });
+      const browser = await puppeteer.launch({
+        ...PUPPETEER_CONFIG.BROWSER_OPTIONS,
+        args: browserArgs
+      });
 
-    this.isInitialized = true;
-    console.log(`[BROWSER-MANAGER] Browser initialized with max ${PUPPETEER_CONFIG.TAB_MANAGEMENT.MAX_TABS} tabs`);
-    
-    return this.browser;
+      const browserInfo = {
+        browser,
+        tabCount: 0,
+        createdAt: Date.now()
+      };
+
+      this.browsers.set(browserId, browserInfo);
+      console.log(`[BROWSER-MANAGER] Browser ${browserId} created (${this.browsers.size} total browsers)`);
+      
+      return { browserId, ...browserInfo };
+    }
+
+    return bestBrowser;
   }
 
   async getAvailableTab(scraperName) {
-    if (!this.browser) {
-      await this.init();
-    }
+    const browserInfo = await this.getAvailableBrowser();
+    const { browserId, browser } = browserInfo;
 
-    // Check if we have available tab slots
-    if (this.activeTabs.size >= PUPPETEER_CONFIG.TAB_MANAGEMENT.MAX_TABS) {
-      console.log(`[BROWSER-MANAGER] Max tabs (${PUPPETEER_CONFIG.TAB_MANAGEMENT.MAX_TABS}) reached, waiting for available tab...`);
-      await this.waitForAvailableTab();
-    }
-
-    const page = await this.browser.newPage();
-    const tabId = `${scraperName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const page = await browser.newPage();
+    const tabId = `${scraperName}_${browserId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     await page.setUserAgent(PUPPETEER_CONFIG.DEFAULT_USER_AGENT);
     await page.setViewport(PUPPETEER_CONFIG.DEFAULT_VIEWPORT);
 
     this.activeTabs.set(tabId, {
       page,
+      browserId,
       scraperName,
       createdAt: Date.now()
     });
 
-    console.log(`[BROWSER-MANAGER] Tab ${tabId} created for ${scraperName} (${this.activeTabs.size}/${PUPPETEER_CONFIG.TAB_MANAGEMENT.MAX_TABS})`);
+    // Tăng tab count cho browser
+    this.browsers.get(browserId).tabCount++;
+
+    const totalTabs = this.activeTabs.size;
+    const browserTabs = this.browsers.get(browserId).tabCount;
+    console.log(`[BROWSER-MANAGER] Tab ${tabId} created for ${scraperName} in ${browserId} (${browserTabs}/${PUPPETEER_CONFIG.TAB_MANAGEMENT.MAX_TABS_PER_BROWSER} in browser, ${totalTabs} total tabs)`);
     
     return { tabId, page };
   }
@@ -66,28 +84,34 @@ class BrowserManager {
       return;
     }
 
+    const { browserId } = tabInfo;
+
     try {
       await tabInfo.page.close();
       this.activeTabs.delete(tabId);
-      console.log(`[BROWSER-MANAGER] Tab ${tabId} released (${this.activeTabs.size}/${PUPPETEER_CONFIG.TAB_MANAGEMENT.MAX_TABS})`);
+      
+      // Giảm tab count cho browser
+      const browserInfo = this.browsers.get(browserId);
+      if (browserInfo) {
+        browserInfo.tabCount--;
+      }
+
+      const totalTabs = this.activeTabs.size;
+      const browserTabs = browserInfo ? browserInfo.tabCount : 0;
+      console.log(`[BROWSER-MANAGER] Tab ${tabId} released from ${browserId} (${browserTabs}/${PUPPETEER_CONFIG.TAB_MANAGEMENT.MAX_TABS_PER_BROWSER} in browser, ${totalTabs} total tabs)`);
       
       // Small delay to prevent rapid tab creation/destruction
       await new Promise(resolve => setTimeout(resolve, PUPPETEER_CONFIG.TAB_MANAGEMENT.TAB_CLOSE_DELAY));
     } catch (error) {
       console.error(`[BROWSER-MANAGER] Error releasing tab ${tabId}:`, error.message);
       this.activeTabs.delete(tabId);
+      
+      // Vẫn giảm tab count nếu có lỗi
+      const browserInfo = this.browsers.get(browserId);
+      if (browserInfo) {
+        browserInfo.tabCount--;
+      }
     }
-  }
-
-  async waitForAvailableTab() {
-    return new Promise((resolve) => {
-      const checkInterval = setInterval(() => {
-        if (this.activeTabs.size < PUPPETEER_CONFIG.TAB_MANAGEMENT.MAX_TABS) {
-          clearInterval(checkInterval);
-          resolve();
-        }
-      }, PUPPETEER_CONFIG.TAB_MANAGEMENT.TAB_REUSE_DELAY);
-    });
   }
 
   async getActiveTabsInfo() {
@@ -95,12 +119,27 @@ class BrowserManager {
     for (const [tabId, tabInfo] of this.activeTabs) {
       tabs.push({
         tabId,
+        browserId: tabInfo.browserId,
         scraperName: tabInfo.scraperName,
         createdAt: tabInfo.createdAt,
         age: Date.now() - tabInfo.createdAt
       });
     }
     return tabs;
+  }
+
+  async getBrowsersInfo() {
+    const browsers = [];
+    for (const [browserId, browserInfo] of this.browsers) {
+      browsers.push({
+        browserId,
+        tabCount: browserInfo.tabCount,
+        maxTabs: PUPPETEER_CONFIG.TAB_MANAGEMENT.MAX_TABS_PER_BROWSER,
+        createdAt: browserInfo.createdAt,
+        age: Date.now() - browserInfo.createdAt
+      });
+    }
+    return browsers;
   }
 
   async forceCleanupOldTabs(maxAge = 300000) { // 5 minutes
@@ -121,27 +160,61 @@ class BrowserManager {
     return oldTabs.length;
   }
 
-  async close() {
-    if (this.browser) {
-      console.log('[BROWSER-MANAGER] Closing shared browser instance...');
-      
-      // Close all active tabs first
-      const tabIds = Array.from(this.activeTabs.keys());
-      for (const tabId of tabIds) {
-        await this.releaseTab(tabId);
+  async closeEmptyBrowsers() {
+    const browsersToClose = [];
+    
+    for (const [browserId, browserInfo] of this.browsers) {
+      if (browserInfo.tabCount === 0) {
+        browsersToClose.push(browserId);
       }
-
-      await this.browser.close();
-      this.browser = null;
-      this.isInitialized = false;
-      this.activeTabs.clear();
-      
-      console.log('[BROWSER-MANAGER] Browser closed');
     }
+
+    for (const browserId of browsersToClose) {
+      const browserInfo = this.browsers.get(browserId);
+      if (browserInfo) {
+        console.log(`[BROWSER-MANAGER] Closing empty browser ${browserId}`);
+        await browserInfo.browser.close();
+        this.browsers.delete(browserId);
+      }
+    }
+
+    return browsersToClose.length;
+  }
+
+  async close() {
+    console.log(`[BROWSER-MANAGER] Closing all browsers (${this.browsers.size} browsers, ${this.activeTabs.size} tabs)...`);
+    
+    // Close all active tabs first
+    const tabIds = Array.from(this.activeTabs.keys());
+    for (const tabId of tabIds) {
+      await this.releaseTab(tabId);
+    }
+
+    // Close all browsers
+    for (const [browserId, browserInfo] of this.browsers) {
+      try {
+        await browserInfo.browser.close();
+        console.log(`[BROWSER-MANAGER] Browser ${browserId} closed`);
+      } catch (error) {
+        console.error(`[BROWSER-MANAGER] Error closing browser ${browserId}:`, error.message);
+      }
+    }
+
+    this.browsers.clear();
+    this.activeTabs.clear();
+    this.browserCounter = 0;
+    
+    console.log('[BROWSER-MANAGER] All browsers closed');
   }
 
   isHealthy() {
-    return this.browser && this.isInitialized && !this.browser.process()?.killed;
+    for (const [browserId, browserInfo] of this.browsers) {
+      if (browserInfo.browser.process()?.killed) {
+        console.warn(`[BROWSER-MANAGER] Browser ${browserId} is killed`);
+        return false;
+      }
+    }
+    return true;
   }
 }
 
