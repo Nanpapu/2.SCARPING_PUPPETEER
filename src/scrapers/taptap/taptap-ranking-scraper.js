@@ -21,50 +21,68 @@ class TapTapRankingScraper {
     while (attempt <= this.config.MAX_RETRIES) {
       try {
         logger.info(`Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
-        
+
         const tabInfo = await browserManager.getAvailableTab('taptap');
         tabId = tabInfo.tabId;
         page = tabInfo.page;
 
-        logger.info('Loading ranking page...');
-        await page.goto(this.config.TARGET_URL, {
-          waitUntil: 'networkidle0',
-          timeout: this.timeouts.PAGE_LOAD
-        });
+        const allGamesFromAllSources = [];
 
-        logger.info('Page loaded, waiting for content...');
-        await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
+        // Process each ranking URL
+        for (const rankingConfig of this.config.TARGET_URLS) {
+          logger.info(`Loading ranking page: ${rankingConfig.source} (${rankingConfig.url})...`);
 
-        // Try to wait for some content to appear
-        try {
-          await page.waitForSelector('body', { timeout: 5000 });
-          logger.info('Body element found');
-        } catch (error) {
-          logger.info('Warning: Could not find body element');
+          await page.goto(rankingConfig.url, {
+            waitUntil: 'networkidle0',
+            timeout: this.timeouts.PAGE_LOAD
+          });
+
+          logger.info('Page loaded, waiting for content...');
+          await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
+
+          // Try to wait for some content to appear
+          try {
+            await page.waitForSelector('body', { timeout: 5000 });
+            logger.info('Body element found');
+          } catch (error) {
+            logger.info('Warning: Could not find body element');
+          }
+
+          logger.info(`Scrolling to load ${this.config.TARGET_RANK} games from ${rankingConfig.source}...`);
+          const gamesFromSource = await this.scrollAndCollectGames(page, logger);
+
+          if (gamesFromSource.length === 0) {
+            logger.info(`Warning: No games found from ${rankingConfig.source}`);
+            continue;
+          }
+
+          // Limit to target rank and add source info
+          const limitedGames = gamesFromSource.slice(0, this.config.TARGET_RANK).map(game => ({
+            ...game,
+            source: rankingConfig.source
+          }));
+
+          logger.info(`Collected ${limitedGames.length} games from ${rankingConfig.source} (target: ${this.config.TARGET_RANK})`);
+          allGamesFromAllSources.push(...limitedGames);
         }
 
-        logger.info(`Scrolling to load ${this.config.TARGET_RANK} games...`);
-        const allGames = await this.scrollAndCollectGames(page, logger);
-
-        if (allGames.length === 0) {
-          throw new Error('No games found');
+        if (allGamesFromAllSources.length === 0) {
+          throw new Error('No games found from any source');
         }
 
-        // Limit to target rank
-        const limitedGames = allGames.slice(0, this.config.TARGET_RANK);
-        logger.info(`Collected ${limitedGames.length} games (target: ${this.config.TARGET_RANK})`);
+        logger.info(`Total collected ${allGamesFromAllSources.length} games from ${this.config.TARGET_URLS.length} sources`);
 
         // Extract release dates in batches
         logger.info(`Extracting release dates in batches of ${this.config.BATCH_SIZE}...`);
         const detailedGames = [];
 
-        for (let i = 0; i < limitedGames.length; i += this.config.BATCH_SIZE) {
-          const batch = limitedGames.slice(i, i + this.config.BATCH_SIZE);
-          logger.info(`Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(limitedGames.length / this.config.BATCH_SIZE)} (${batch.length} games)`);
+        for (let i = 0; i < allGamesFromAllSources.length; i += this.config.BATCH_SIZE) {
+          const batch = allGamesFromAllSources.slice(i, i + this.config.BATCH_SIZE);
+          logger.info(`Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(allGamesFromAllSources.length / this.config.BATCH_SIZE)} (${batch.length} games)`);
 
           const batchPromises = batch.map(async (game, index) => {
             try {
-              logger.info(`  Processing game ${i + index + 1}/${limitedGames.length}: ${game.title}`);
+              logger.info(`  Processing game ${i + index + 1}/${allGamesFromAllSources.length}: ${game.title} (${game.source})`);
               const releaseDate = await this.extractReleaseDate(game.gameLink, logger);
               return {
                 ...game,
@@ -82,7 +100,7 @@ class TapTapRankingScraper {
           const batchResults = await Promise.all(batchPromises);
           detailedGames.push(...batchResults);
 
-          if (i + this.config.BATCH_SIZE < limitedGames.length) {
+          if (i + this.config.BATCH_SIZE < allGamesFromAllSources.length) {
             logger.info(`  Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
             await new Promise(resolve => setTimeout(resolve, this.timeouts.BATCH_DELAY));
           }
@@ -91,7 +109,7 @@ class TapTapRankingScraper {
         const result = this.formatResult(detailedGames);
         await this.saveToFile(result);
 
-        logger.info(`Successfully scraped ${limitedGames.length} games with release dates`);
+        logger.info(`Successfully scraped ${allGamesFromAllSources.length} games with release dates`);
         return result;
 
       } catch (error) {
@@ -422,11 +440,11 @@ class TapTapRankingScraper {
   formatResult(games) {
     const now = new Date();
     const vietnamTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-    
+
     return {
       timestamp: vietnamTime.toISOString().replace('Z', '+07:00'),
-      source: this.config.TARGET_URL,
-      target_rank: this.config.TARGET_RANK,
+      sources: this.config.TARGET_URLS.map(config => config.url),
+      target_rank_per_source: this.config.TARGET_RANK,
       data: games,
       total: games.length
     };

@@ -94,7 +94,10 @@ const SCRAPER_CONFIGS = {
   taptap: {
     BATCH_SIZE: 10,
     MAX_RETRIES: 3,
-    TARGET_URL: 'https://www.taptap.cn/top/download?os=pc',
+    TARGET_URLS: [
+      { url: 'https://www.taptap.cn/top/download?os=pc', source: 'download' },
+      { url: 'https://www.taptap.cn/top/reserve?os=pc', source: 'reserve' }
+    ],
     TARGET_RANK: 50,
     ITEMS_PER_SCROLL: 10,
     GAME_CONTAINER_SELECTOR: 'div.list-item',
