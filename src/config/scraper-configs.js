@@ -39,7 +39,7 @@ const SCRAPER_CONFIGS = {
   },
 
   '9game': {
-    BATCH_SIZE: 10,
+    BATCH_SIZE: 5,
     MAX_RETRIES: 3,
     TARGET_URL: 'https://www.9game.cn/xyrb/?spm=aligames_platform_ug.ng_seo.0.0.36d769b18t8wzl',
     RANKING_SELECTORS: {

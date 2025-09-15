@@ -27,14 +27,45 @@ class NineGameRankingListScraper {
         page = tabInfo.page;
 
         logger.info('Loading ranking page...');
-        await page.goto(this.config.TARGET_URL, {
-          waitUntil: 'domcontentloaded',
-          timeout: this.timeouts.PAGE_LOAD
+        const startTime = Date.now();
+
+        // Add request interception for timing
+        await page.setRequestInterception(true);
+        let requestCount = 0;
+        let responseCount = 0;
+
+        page.on('request', (request) => {
+          requestCount++;
+          logger.info(`[NETWORK] Request #${requestCount}: ${request.method()} ${request.url().substring(0, 100)}...`);
+          request.continue();
         });
+
+        page.on('response', (response) => {
+          responseCount++;
+          logger.info(`[NETWORK] Response #${responseCount}: ${response.status()} ${response.url().substring(0, 100)}... (${Date.now() - startTime}ms)`);
+        });
+
+        try {
+          await page.goto(this.config.TARGET_URL, {
+            waitUntil: 'domcontentloaded',
+            timeout: this.timeouts.PAGE_LOAD
+          });
+
+          const loadTime = Date.now() - startTime;
+          logger.info(`[TIMING] Page loaded in ${loadTime}ms (${requestCount} requests, ${responseCount} responses)`);
+
+        } catch (error) {
+          const failTime = Date.now() - startTime;
+          logger.error(`[TIMING] Page load FAILED after ${failTime}ms: ${error.message}`);
+          throw error;
+        }
 
         // Smart wait: check for content availability instead of fixed timeout
         logger.info('Waiting for ranking content to load...');
+        const smartWaitStart = Date.now();
         await this.smartWaitForRankingContent(page);
+        const smartWaitTime = Date.now() - smartWaitStart;
+        logger.info(`[TIMING] Smart wait completed in ${smartWaitTime}ms`);
 
         logger.info('Extracting ranking data...');
         const rankingData = await this.extractRankingData(page);
@@ -51,16 +82,20 @@ class NineGameRankingListScraper {
           logger.info(`Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(rankingData.length / this.config.BATCH_SIZE)} (${batch.length} games)`);
           
           const batchPromises = batch.map(async (item, index) => {
+            const gameStartTime = Date.now();
             try {
               logger.info(`  Processing game ${i + index + 1}/${rankingData.length}: ${item.link}`);
               const details = await this.extractGameDetails(item.link, logger);
+              const gameTime = Date.now() - gameStartTime;
+              logger.info(`  ✓ Game completed in ${gameTime}ms`);
               return {
                 rank: item.rank,
                 link: item.link,
                 ...details
               };
             } catch (error) {
-              logger.error(`  Failed to extract details from ${item.link}:${error.message ? ": " + error.message : ""}`);
+              const gameTime = Date.now() - gameStartTime;
+              logger.error(`  ✗ Game FAILED after ${gameTime}ms: ${item.link}${error.message ? ": " + error.message : ""}`);
               return {
                 rank: item.rank,
                 link: item.link,
@@ -108,28 +143,71 @@ class NineGameRankingListScraper {
   async smartWaitForRankingContent(page) {
     const startTime = Date.now();
     const maxWait = this.timeouts.SMART_WAIT_MAX;
+    let checkCount = 0;
 
     while (Date.now() - startTime < maxWait) {
       try {
+        checkCount++;
+        const checkStart = Date.now();
+
         // Check if ranking elements are present
-        const hasContent = await page.evaluate((selectors) => {
+        const contentInfo = await page.evaluate((selectors) => {
           const rankElements = document.querySelectorAll(selectors.rank);
           const linkElements = document.querySelectorAll(selectors.link);
-          return rankElements.length > 0 && linkElements.length > 0;
+
+          // Get page state info
+          const bodyHTML = document.body ? document.body.innerHTML.length : 0;
+          const allElements = document.querySelectorAll('*').length;
+
+          return {
+            hasContent: rankElements.length > 0 && linkElements.length > 0,
+            rankCount: rankElements.length,
+            linkCount: linkElements.length,
+            bodySize: bodyHTML,
+            elementCount: allElements,
+            title: document.title,
+            readyState: document.readyState
+          };
         }, this.config.RANKING_SELECTORS);
 
-        if (hasContent) {
-          await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD); // Brief final wait
+        const checkTime = Date.now() - checkStart;
+        console.log(`[DEBUG] Check #${checkCount} (${checkTime}ms): ranks=${contentInfo.rankCount}, links=${contentInfo.linkCount}, bodySize=${contentInfo.bodySize}, elements=${contentInfo.elementCount}, readyState=${contentInfo.readyState}`);
+        console.log(`[DEBUG] Page title: "${contentInfo.title}"`);
+
+        if (contentInfo.hasContent) {
+          const totalTime = Date.now() - startTime;
+          console.log(`[SUCCESS] Content found after ${totalTime}ms, ${checkCount} checks`);
+          await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
           return;
         }
       } catch (error) {
-        // Continue waiting
+        console.log(`[ERROR] Check #${checkCount} failed: ${error.message}`);
       }
 
       await page.waitForTimeout(200); // Check every 200ms
     }
 
-    // Fallback to standard wait if content not detected
+    const totalTime = Date.now() - startTime;
+    console.log(`[TIMEOUT] Smart wait exhausted after ${totalTime}ms, ${checkCount} checks`);
+
+    // Final content check before giving up
+    try {
+      const finalCheck = await page.evaluate((selectors) => {
+        const rankElements = document.querySelectorAll(selectors.rank);
+        const linkElements = document.querySelectorAll(selectors.link);
+        return {
+          rankCount: rankElements.length,
+          linkCount: linkElements.length,
+          innerHTML: document.body ? document.body.innerHTML.substring(0, 500) : 'No body'
+        };
+      }, this.config.RANKING_SELECTORS);
+      console.log(`[FINAL CHECK] ranks=${finalCheck.rankCount}, links=${finalCheck.linkCount}`);
+      console.log(`[HTML SAMPLE] ${finalCheck.innerHTML}...`);
+    } catch (error) {
+      console.log(`[FINAL CHECK ERROR] ${error.message}`);
+    }
+
+    // Fallback to standard wait
     await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
   }
 
