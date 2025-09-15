@@ -51,7 +51,7 @@ class NineGameRankingListScraper {
           const batchPromises = batch.map(async (item, index) => {
             try {
               logger.info(`  Processing game ${i + index + 1}/${rankingData.length}: ${item.link}`);
-              const details = await this.extractGameDetails(item.link);
+              const details = await this.extractGameDetails(item.link, logger);
               return {
                 rank: item.rank,
                 link: item.link,
@@ -126,7 +126,7 @@ class NineGameRankingListScraper {
     return rankingData;
   }
 
-  async extractGameDetails(url) {
+  async extractGameDetails(url, logger = console) {
     const tabInfo = await browserManager.getAvailableTab('9game-detail');
     const { tabId, page } = tabInfo;
     
@@ -140,7 +140,7 @@ class NineGameRankingListScraper {
 
       // First try released game selectors
       let details = await this.tryExtractDetails(page, this.config.DETAILS_SELECTORS.released, url);
-      
+
       // If day is null/empty, try unreleased game selectors
       if (!details.day) {
         logger.info(`    Game appears unreleased, trying unreleased selectors...`);

@@ -44,7 +44,7 @@ class TapTapRankingScraper {
         }
 
         logger.info(`Scrolling to load ${this.config.TARGET_RANK} games...`);
-        const allGames = await this.scrollAndCollectGames(page);
+        const allGames = await this.scrollAndCollectGames(page, logger);
 
         if (allGames.length === 0) {
           throw new Error('No games found');
@@ -77,7 +77,7 @@ class TapTapRankingScraper {
     }
   }
 
-  async scrollAndCollectGames(page) {
+  async scrollAndCollectGames(page, logger = console) {
     logger.info(`Fast scrolling to load pages 1-${this.config.TARGET_PAGE}...`);
 
     // Fast scroll until we have all pages loaded
@@ -124,12 +124,12 @@ class TapTapRankingScraper {
 
     // Now extract all games from loaded pages
     logger.info(`Extracting games from all loaded pages...`);
-    const allGames = await this.extractAllGamesFromPages(page);
+    const allGames = await this.extractAllGamesFromPages(page, logger);
 
     return allGames;
   }
 
-  async extractAllGamesFromPages(page) {
+  async extractAllGamesFromPages(page, logger = console) {
     const allGames = await page.evaluate((containerSelector, selectors, targetPage) => {
       const results = [];
 
