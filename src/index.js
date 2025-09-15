@@ -212,7 +212,7 @@ app.post('/api/scrape/taptap', async (req, res) => {
   }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Multi-website scraper server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`Available scrapers: ${Object.keys(scrapers).join(', ')}`);
@@ -222,3 +222,8 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`GNN scraper: POST http://localhost:${PORT}/api/scrape/gnn`);
   console.log(`TapTap scraper: POST http://localhost:${PORT}/api/scrape/taptap`);
 });
+
+// Set server timeout to 30 minutes (1800000ms) to prevent timeouts during long scraping operations
+server.timeout = 1800000;
+server.keepAliveTimeout = 1800000;
+server.headersTimeout = 1800000;

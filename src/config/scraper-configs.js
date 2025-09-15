@@ -92,7 +92,7 @@ const SCRAPER_CONFIGS = {
   },
 
   taptap: {
-    BATCH_SIZE: 10,
+    BATCH_SIZE: 20,
     MAX_RETRIES: 3,
     TARGET_URLS: [
       { url: 'https://www.taptap.cn/top/download?os=pc', source: 'download' },
