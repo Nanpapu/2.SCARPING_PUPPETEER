@@ -80,7 +80,7 @@ class SohuScraper {
         const result = this.formatResult(detailedData);
         await this.saveToFile(result);
 
-        logger.success(`Successfully scraped ${links.length} links with details`);
+        logger.info(`Successfully scraped ${links.length} links with details`);
         return result;
 
       } catch (error) {

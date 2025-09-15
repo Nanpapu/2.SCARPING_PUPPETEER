@@ -70,7 +70,7 @@ app.post('/api/scrape/sohu', async (req, res) => {
     logger.info('Sohu manual scrape triggered');
     const result = await scrapers.sohu.scrape(logger);
 
-    logger.success(`Sohu scraping completed successfully. Items scraped: ${result.items ? result.items.length : 'N/A'}`);
+    logger.success(`Sohu scraping completed successfully. Items scraped: ${result.data ? result.data.length : result.total || 'N/A'}`);
 
     res.json({
       success: true,
@@ -100,7 +100,7 @@ app.post('/api/scrape/gamelook', async (req, res) => {
     logger.info('Gamelook manual scrape triggered');
     const result = await scrapers.gamelook.scrape(logger);
 
-    logger.success(`Gamelook scraping completed successfully. Items scraped: ${result.items ? result.items.length : 'N/A'}`);
+    logger.success(`Gamelook scraping completed successfully. Items scraped: ${result.data ? result.data.length : result.total || 'N/A'}`);
 
     res.json({
       success: true,
@@ -130,7 +130,7 @@ app.post('/api/scrape/9game', async (req, res) => {
     logger.info('9Game manual scrape triggered');
     const result = await scrapers['9game'].scrape(logger);
 
-    logger.success(`9Game scraping completed successfully. Items scraped: ${result.items ? result.items.length : 'N/A'}`);
+    logger.success(`9Game scraping completed successfully. Items scraped: ${result.data ? result.data.length : result.total || 'N/A'}`);
 
     res.json({
       success: true,
@@ -160,7 +160,7 @@ app.post('/api/scrape/gnn', async (req, res) => {
     logger.info('GNN manual scrape triggered');
     const result = await scrapers.gnn.scrape(logger);
 
-    logger.success(`GNN scraping completed successfully. Items scraped: ${result.items ? result.items.length : 'N/A'}`);
+    logger.success(`GNN scraping completed successfully. Items scraped: ${result.data ? result.data.length : result.total || 'N/A'}`);
 
     res.json({
       success: true,
@@ -190,7 +190,7 @@ app.post('/api/scrape/taptap', async (req, res) => {
     logger.info('TapTap manual scrape triggered');
     const result = await scrapers.taptap.scrape(logger);
 
-    logger.success(`TapTap scraping completed successfully. Items scraped: ${result.items ? result.items.length : 'N/A'}`);
+    logger.success(`TapTap scraping completed successfully. Items scraped: ${result.data ? result.data.length : result.total || 'N/A'}`);
 
     res.json({
       success: true,
