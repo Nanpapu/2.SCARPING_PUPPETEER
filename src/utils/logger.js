@@ -8,10 +8,8 @@ class Logger {
     this.logDir = path.join(__dirname, '../../logs');
     this.logFile = this.createLogFile();
 
-    // Ensure logs directory exists
-    if (!fs.existsSync(this.logDir)) {
-      fs.mkdirSync(this.logDir, { recursive: true });
-    }
+    // Auto-create logs directory
+    this.ensureLogDir();
   }
 
   createLogFile() {
@@ -27,6 +25,12 @@ class Logger {
     }).replace(/[\/\s:]/g, '-');
 
     return path.join(this.logDir, `${this.scraper}-${dateStr}-${this.requestId}.log`);
+  }
+
+  ensureLogDir() {
+    if (!fs.existsSync(this.logDir)) {
+      fs.mkdirSync(this.logDir, { recursive: true });
+    }
   }
 
   log(message, level = 'INFO') {

@@ -401,8 +401,11 @@ class TapTapRankingScraper {
     const minutes = String(vietnamTime.getUTCMinutes()).padStart(2, '0');
     
     const filename = `taptap-ranking-${day}-${month}-${year}-${hours}-${minutes}.json`;
-    const filepath = path.join(__dirname, '../../../results/taptap', filename);
+    const dirpath = path.join(__dirname, '../../../results/taptap');
+    const filepath = path.join(dirpath, filename);
 
+    // Auto-create directory if it doesn't exist
+    await fs.promises.mkdir(dirpath, { recursive: true });
     await fs.promises.writeFile(filepath, JSON.stringify(data, null, 2), 'utf8');
     // Results saved message will be logged by the main server
     

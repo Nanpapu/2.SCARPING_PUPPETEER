@@ -282,8 +282,11 @@ class GnnScraper {
     const minutes = String(vietnamTime.getUTCMinutes()).padStart(2, '0');
     
     const filename = `gnn-${day}-${month}-${year}-${hours}-${minutes}.json`;
-    const filepath = path.join(__dirname, '../../../results/gnn', filename);
+    const dirpath = path.join(__dirname, '../../../results/gnn');
+    const filepath = path.join(dirpath, filename);
 
+    // Auto-create directory if it doesn't exist
+    await fs.promises.mkdir(dirpath, { recursive: true });
     await fs.promises.writeFile(filepath, JSON.stringify(data, null, 2), 'utf8');
     console.log(`[GNN] Results saved to: results/gnn/${filename}`);
     
