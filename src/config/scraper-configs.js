@@ -43,8 +43,10 @@ const SCRAPER_CONFIGS = {
     MAX_RETRIES: 3,
     TARGET_URL: 'https://www.9game.cn/xyrb/?spm=aligames_platform_ug.ng_seo.0.0.36d769b18t8wzl',
     RANKING_SELECTORS: {
-      rank: 'td.num span.n',
-      link: 'td.name a'
+      table_indicator: 'div.box-text',
+      table_container: 'div.box-text table tbody',
+      rank_cell: 'td.num span',
+      link_cell: 'td.name a'
     },
     DETAILS_SELECTORS: {
       released: {
@@ -72,7 +74,8 @@ const SCRAPER_CONFIGS = {
       WAIT_AFTER_LOAD: 1000,
       WAIT_AFTER_DETAIL: 500,
       BATCH_DELAY: 500,
-      SMART_WAIT_MAX: 5000
+      SMART_WAIT_MAX: 30000,
+      POLL_INTERVAL: 1000
     }
   },
 

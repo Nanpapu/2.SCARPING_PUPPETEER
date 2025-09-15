@@ -143,65 +143,119 @@ class NineGameRankingListScraper {
   async smartWaitForRankingContent(page) {
     const startTime = Date.now();
     const maxWait = this.timeouts.SMART_WAIT_MAX;
+    const pollInterval = this.timeouts.POLL_INTERVAL;
     let checkCount = 0;
+
+    console.log(`[POLLING] Starting smart wait for div.box-text table, checking every ${pollInterval}ms for max ${maxWait}ms`);
 
     while (Date.now() - startTime < maxWait) {
       try {
         checkCount++;
         const checkStart = Date.now();
 
-        // Check if ranking elements are present
+        // Check if box-text div and table structure are present
         const contentInfo = await page.evaluate((selectors) => {
-          const rankElements = document.querySelectorAll(selectors.rank);
-          const linkElements = document.querySelectorAll(selectors.link);
+          // Look for the box-text indicator first
+          const boxTextDiv = document.querySelector(selectors.table_indicator);
 
-          // Get page state info
-          const bodyHTML = document.body ? document.body.innerHTML.length : 0;
-          const allElements = document.querySelectorAll('*').length;
+          if (!boxTextDiv) {
+            return {
+              hasBoxText: false,
+              hasTable: false,
+              hasContent: false,
+              boxTextCount: 0,
+              tableCount: 0,
+              rowCount: 0,
+              rankCount: 0,
+              linkCount: 0,
+              bodySize: document.body ? document.body.innerHTML.length : 0,
+              elementCount: document.querySelectorAll('*').length,
+              title: document.title,
+              readyState: document.readyState
+            };
+          }
+
+          // Look for table inside box-text
+          const tableContainer = document.querySelector(selectors.table_container);
+          if (!tableContainer) {
+            return {
+              hasBoxText: true,
+              hasTable: false,
+              hasContent: false,
+              boxTextCount: 1,
+              tableCount: 0,
+              rowCount: 0,
+              rankCount: 0,
+              linkCount: 0,
+              bodySize: document.body ? document.body.innerHTML.length : 0,
+              elementCount: document.querySelectorAll('*').length,
+              title: document.title,
+              readyState: document.readyState
+            };
+          }
+
+          // Count rows (excluding th header)
+          const allRows = tableContainer.querySelectorAll('tr');
+          const dataRows = Array.from(allRows).filter(row => !row.querySelector('th'));
+
+          // Count rank and link elements
+          const rankElements = tableContainer.querySelectorAll(selectors.rank_cell);
+          const linkElements = tableContainer.querySelectorAll(selectors.link_cell);
 
           return {
+            hasBoxText: true,
+            hasTable: true,
             hasContent: rankElements.length > 0 && linkElements.length > 0,
+            boxTextCount: 1,
+            tableCount: 1,
+            rowCount: dataRows.length,
             rankCount: rankElements.length,
             linkCount: linkElements.length,
-            bodySize: bodyHTML,
-            elementCount: allElements,
+            bodySize: document.body ? document.body.innerHTML.length : 0,
+            elementCount: document.querySelectorAll('*').length,
             title: document.title,
             readyState: document.readyState
           };
         }, this.config.RANKING_SELECTORS);
 
         const checkTime = Date.now() - checkStart;
-        console.log(`[DEBUG] Check #${checkCount} (${checkTime}ms): ranks=${contentInfo.rankCount}, links=${contentInfo.linkCount}, bodySize=${contentInfo.bodySize}, elements=${contentInfo.elementCount}, readyState=${contentInfo.readyState}`);
-        console.log(`[DEBUG] Page title: "${contentInfo.title}"`);
+        console.log(`[POLL] Check #${checkCount} (${checkTime}ms): boxText=${contentInfo.hasBoxText}, table=${contentInfo.hasTable}, rows=${contentInfo.rowCount}, ranks=${contentInfo.rankCount}, links=${contentInfo.linkCount}`);
+        console.log(`[POLL] Page state: bodySize=${contentInfo.bodySize}, elements=${contentInfo.elementCount}, readyState=${contentInfo.readyState}, title="${contentInfo.title}"`);
 
-        if (contentInfo.hasContent) {
+        if (contentInfo.hasContent && contentInfo.rowCount > 0) {
           const totalTime = Date.now() - startTime;
-          console.log(`[SUCCESS] Content found after ${totalTime}ms, ${checkCount} checks`);
+          console.log(`[SUCCESS] Table content found after ${totalTime}ms, ${checkCount} checks! Found ${contentInfo.rowCount} data rows.`);
           await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
           return;
         }
       } catch (error) {
-        console.log(`[ERROR] Check #${checkCount} failed: ${error.message}`);
+        console.log(`[ERROR] Poll check #${checkCount} failed: ${error.message}`);
       }
 
-      await page.waitForTimeout(200); // Check every 200ms
+      await page.waitForTimeout(pollInterval); // Check every 1 second
     }
 
     const totalTime = Date.now() - startTime;
     console.log(`[TIMEOUT] Smart wait exhausted after ${totalTime}ms, ${checkCount} checks`);
 
-    // Final content check before giving up
+    // Final detailed check before giving up
     try {
       const finalCheck = await page.evaluate((selectors) => {
-        const rankElements = document.querySelectorAll(selectors.rank);
-        const linkElements = document.querySelectorAll(selectors.link);
+        const boxTextDiv = document.querySelector(selectors.table_indicator);
+        const tableContainer = document.querySelector(selectors.table_container);
+        const rankElements = document.querySelectorAll(selectors.rank_cell);
+        const linkElements = document.querySelectorAll(selectors.link_cell);
+
         return {
+          boxTextFound: !!boxTextDiv,
+          tableFound: !!tableContainer,
           rankCount: rankElements.length,
           linkCount: linkElements.length,
-          innerHTML: document.body ? document.body.innerHTML.substring(0, 500) : 'No body'
+          innerHTML: document.body ? document.body.innerHTML.substring(0, 1000) : 'No body'
         };
       }, this.config.RANKING_SELECTORS);
-      console.log(`[FINAL CHECK] ranks=${finalCheck.rankCount}, links=${finalCheck.linkCount}`);
+
+      console.log(`[FINAL CHECK] boxText=${finalCheck.boxTextFound}, table=${finalCheck.tableFound}, ranks=${finalCheck.rankCount}, links=${finalCheck.linkCount}`);
       console.log(`[HTML SAMPLE] ${finalCheck.innerHTML}...`);
     } catch (error) {
       console.log(`[FINAL CHECK ERROR] ${error.message}`);
@@ -243,21 +297,50 @@ class NineGameRankingListScraper {
 
   async extractRankingData(page) {
     const rankingData = await page.evaluate((selectors) => {
-      const rankElements = document.querySelectorAll(selectors.rank);
-      const linkElements = document.querySelectorAll(selectors.link);
-      
-      const results = [];
-      const minLength = Math.min(rankElements.length, linkElements.length);
-      
-      for (let i = 0; i < minLength; i++) {
-        const rank = rankElements[i].textContent.trim();
-        const link = linkElements[i].href;
-        
-        if (rank && link) {
-          results.push({ rank, link });
-        }
+      console.log('[EXTRACT] Starting table data extraction...');
+
+      // First find the table container
+      const tableContainer = document.querySelector(selectors.table_container);
+      if (!tableContainer) {
+        console.log('[EXTRACT] No table container found with selector:', selectors.table_container);
+        return [];
       }
-      
+
+      console.log('[EXTRACT] Found table container, looking for rows...');
+
+      // Get all rows in tbody, excluding th headers
+      const allRows = tableContainer.querySelectorAll('tr');
+      const dataRows = Array.from(allRows).filter(row => !row.querySelector('th'));
+
+      console.log(`[EXTRACT] Found ${dataRows.length} data rows (excluding headers)`);
+
+      const results = [];
+
+      dataRows.forEach((row, index) => {
+        try {
+          // Find rank cell (td.num span)
+          const rankCell = row.querySelector('td.num');
+          const rankSpan = rankCell ? rankCell.querySelector('span') : null;
+          const rank = rankSpan ? rankSpan.textContent.trim() : null;
+
+          // Find link cell (td.name a)
+          const linkCell = row.querySelector('td.name');
+          const linkElement = linkCell ? linkCell.querySelector('a') : null;
+          const link = linkElement ? linkElement.href : null;
+
+          console.log(`[EXTRACT] Row ${index + 1}: rank="${rank}", link="${link ? link.substring(0, 50) + '...' : 'null'}"`);
+
+          if (rank && link) {
+            results.push({ rank, link });
+          } else {
+            console.log(`[EXTRACT] Row ${index + 1} SKIPPED: missing rank or link`);
+          }
+        } catch (error) {
+          console.log(`[EXTRACT] Error processing row ${index + 1}:`, error.message);
+        }
+      });
+
+      console.log(`[EXTRACT] Successfully extracted ${results.length} ranking entries`);
       return results;
     }, this.config.RANKING_SELECTORS);
 
