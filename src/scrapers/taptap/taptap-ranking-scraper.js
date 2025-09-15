@@ -174,6 +174,10 @@ class TapTapRankingScraper {
       logger.info(`Warning: Could not load all pages after ${scrollAttempts} attempts`);
     }
 
+    // Wait 10 seconds to ensure all content is fully loaded
+    logger.info(`Waiting 10 seconds to ensure all content is fully loaded...`);
+    await page.waitForTimeout(10000);
+
     // Now extract all games from loaded pages
     logger.info(`Extracting games from all loaded pages...`);
     const allGames = await this.extractAllGamesFromPages(page, logger);
