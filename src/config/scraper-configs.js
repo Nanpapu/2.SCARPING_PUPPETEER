@@ -39,7 +39,7 @@ const SCRAPER_CONFIGS = {
   },
 
   '9game': {
-    BATCH_SIZE: 20,
+    BATCH_SIZE: 10,
     MAX_RETRIES: 3,
     TARGET_URL: 'https://www.9game.cn/xyrb/?spm=aligames_platform_ug.ng_seo.0.0.36d769b18t8wzl',
     RANKING_SELECTORS: {
@@ -67,9 +67,12 @@ const SCRAPER_CONFIGS = {
       }
     },
     CUSTOM_TIMEOUTS: {
-      PAGE_LOAD: 300000,
-      DETAIL_LOAD: 300000,
-      BATCH_DELAY: 2000
+      PAGE_LOAD: 30000,
+      DETAIL_LOAD: 30000,
+      WAIT_AFTER_LOAD: 1000,
+      WAIT_AFTER_DETAIL: 500,
+      BATCH_DELAY: 500,
+      SMART_WAIT_MAX: 5000
     }
   },
 

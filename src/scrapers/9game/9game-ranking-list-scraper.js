@@ -27,12 +27,14 @@ class NineGameRankingListScraper {
         page = tabInfo.page;
 
         logger.info('Loading ranking page...');
-        await page.goto(this.config.TARGET_URL, { 
+        await page.goto(this.config.TARGET_URL, {
           waitUntil: 'domcontentloaded',
-          timeout: this.timeouts.PAGE_LOAD 
+          timeout: this.timeouts.PAGE_LOAD
         });
 
-        await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
+        // Smart wait: check for content availability instead of fixed timeout
+        logger.info('Waiting for ranking content to load...');
+        await this.smartWaitForRankingContent(page);
 
         logger.info('Extracting ranking data...');
         const rankingData = await this.extractRankingData(page);
@@ -103,6 +105,64 @@ class NineGameRankingListScraper {
     }
   }
 
+  async smartWaitForRankingContent(page) {
+    const startTime = Date.now();
+    const maxWait = this.timeouts.SMART_WAIT_MAX;
+
+    while (Date.now() - startTime < maxWait) {
+      try {
+        // Check if ranking elements are present
+        const hasContent = await page.evaluate((selectors) => {
+          const rankElements = document.querySelectorAll(selectors.rank);
+          const linkElements = document.querySelectorAll(selectors.link);
+          return rankElements.length > 0 && linkElements.length > 0;
+        }, this.config.RANKING_SELECTORS);
+
+        if (hasContent) {
+          await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD); // Brief final wait
+          return;
+        }
+      } catch (error) {
+        // Continue waiting
+      }
+
+      await page.waitForTimeout(200); // Check every 200ms
+    }
+
+    // Fallback to standard wait if content not detected
+    await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
+  }
+
+  async smartWaitForGameContent(page) {
+    const startTime = Date.now();
+    const maxWait = this.timeouts.SMART_WAIT_MAX;
+
+    while (Date.now() - startTime < maxWait) {
+      try {
+        // Check if any game content elements are present
+        const hasContent = await page.evaluate((releasedSelectors, unreleasedSelectors) => {
+          // Check for basic content indicators
+          const titleElements = document.querySelectorAll('h1, .tit, [class*="title"]');
+          const gameElements = document.querySelectorAll('[class*="game"], [class*="materials"]');
+
+          return titleElements.length > 0 || gameElements.length > 0;
+        }, this.config.DETAILS_SELECTORS.released, this.config.DETAILS_SELECTORS.unreleased);
+
+        if (hasContent) {
+          await page.waitForTimeout(this.timeouts.WAIT_AFTER_DETAIL); // Brief final wait
+          return;
+        }
+      } catch (error) {
+        // Continue waiting
+      }
+
+      await page.waitForTimeout(200); // Check every 200ms
+    }
+
+    // Fallback to standard wait if content not detected
+    await page.waitForTimeout(this.timeouts.WAIT_AFTER_DETAIL);
+  }
+
   async extractRankingData(page) {
     const rankingData = await page.evaluate((selectors) => {
       const rankElements = document.querySelectorAll(selectors.rank);
@@ -131,12 +191,13 @@ class NineGameRankingListScraper {
     const { tabId, page } = tabInfo;
     
     try {
-      await page.goto(url, { 
+      await page.goto(url, {
         waitUntil: 'domcontentloaded',
         timeout: this.timeouts.DETAIL_LOAD
       });
-      
-      await page.waitForTimeout(this.timeouts.WAIT_AFTER_DETAIL);
+
+      // Smart wait: check for game content instead of fixed timeout
+      await this.smartWaitForGameContent(page);
 
       // First try released game selectors
       let details = await this.tryExtractDetails(page, this.config.DETAILS_SELECTORS.released, url);
