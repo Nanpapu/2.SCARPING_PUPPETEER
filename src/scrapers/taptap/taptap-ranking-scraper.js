@@ -130,7 +130,8 @@ class TapTapRankingScraper {
   }
 
   async scrollAndCollectGames(page, logger = console) {
-    logger.info(`Fast scrolling to load pages 1-${this.config.TARGET_PAGE}...`);
+    const scrollToPage = this.config.SCROLL_TO_PAGE || this.config.TARGET_PAGE;
+    logger.info(`Fast scrolling to load pages 1-${scrollToPage} (but will extract data from pages 1-${this.config.TARGET_PAGE})...`);
 
     // Fast scroll until we have all pages loaded
     let scrollAttempts = 0;
@@ -140,22 +141,22 @@ class TapTapRankingScraper {
       logger.info(`Fast scroll attempt ${scrollAttempts + 1}`);
 
       // Check current pages loaded
-      const currentPages = await page.evaluate((targetPage) => {
+      const currentPages = await page.evaluate((scrollToPage) => {
         const pages = [];
-        for (let i = 1; i <= targetPage; i++) {
+        for (let i = 1; i <= scrollToPage; i++) {
           const pageElements = document.querySelectorAll(`div.list-item[data-page="${i}"]`);
           if (pageElements.length > 0) {
             pages.push({ page: i, count: pageElements.length });
           }
         }
         return pages;
-      }, this.config.TARGET_PAGE);
+      }, scrollToPage);
 
       console.log(`[TAPTAP] Current loaded pages:`, currentPages.map(p => `page ${p.page}: ${p.count} items`).join(', '));
 
       // Check if target page is loaded
-      if (currentPages.length === this.config.TARGET_PAGE && currentPages[currentPages.length - 1].page === this.config.TARGET_PAGE) {
-        logger.info(`All pages 1-${this.config.TARGET_PAGE} loaded successfully!`);
+      if (currentPages.length === scrollToPage && currentPages[currentPages.length - 1].page === scrollToPage) {
+        logger.info(`All pages 1-${scrollToPage} loaded successfully!`);
         targetPageFound = true;
         break;
       }
@@ -171,7 +172,7 @@ class TapTapRankingScraper {
     }
 
     if (!targetPageFound) {
-      logger.info(`Warning: Could not load all pages after ${scrollAttempts} attempts`);
+      logger.info(`Warning: Could not load all pages up to page ${scrollToPage} after ${scrollAttempts} attempts`);
     }
 
     // Wait 10 seconds to ensure all content is fully loaded

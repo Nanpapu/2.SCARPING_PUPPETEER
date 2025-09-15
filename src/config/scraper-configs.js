@@ -102,6 +102,7 @@ const SCRAPER_CONFIGS = {
     ITEMS_PER_SCROLL: 10,
     GAME_CONTAINER_SELECTOR: 'div.list-item',
     TARGET_PAGE: 5,
+    SCROLL_TO_PAGE: 6,
     RANKING_SELECTORS: {
       rank: 'span[class*="data-v-ea802df3"]',
       title: 'div.text-with-tags.app-title span',
