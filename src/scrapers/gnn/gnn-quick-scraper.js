@@ -13,21 +13,21 @@ class GnnQuickScraper {
     };
   }
 
-  async scrape() {
+  async scrape(logger = console) {
     let tabId = null;
     let page = null;
     let attempt = 1;
 
     while (attempt <= this.config.MAX_RETRIES) {
       try {
-        console.log(`[GNN-QUICK] Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
+        logger.info(`Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
 
         // Collect all links from all categories in parallel
-        console.log(`[GNN-QUICK] Processing all ${this.config.CATEGORIES.length} categories in parallel...`);
+        logger.info(`Processing all ${this.config.CATEGORIES.length} categories in parallel...`);
         const categoryPromises = this.config.CATEGORIES.map(async (category) => {
-          console.log(`[GNN-QUICK] Starting category: ${category.source}`);
+          logger.info(`Starting category: ${category.source}`);
           const categoryLinks = await this.extractLinksFromCategory(category);
-          console.log(`[GNN-QUICK] Found ${categoryLinks.length} links from ${category.source}`);
+          logger.info(`Found ${categoryLinks.length} links from ${category.source}`);
           return categoryLinks;
         });
 
@@ -58,16 +58,16 @@ class GnnQuickScraper {
           throw new Error('No links found from any categories');
         }
 
-        console.log(`[GNN-QUICK] Total found ${allLinksWithDuplicates.length} links (${uniqueLinks.length} unique)`);
+        logger.info(`Total found ${allLinksWithDuplicates.length} links (${uniqueLinks.length} unique)`);
 
         try {
           const result = this.formatResult(uniqueLinks);
           await this.saveToFile(result);
 
-          console.log(`[GNN-QUICK] Successfully scraped ${uniqueLinks.length} unique links`);
+          logger.info(`Successfully scraped ${uniqueLinks.length} unique links`);
           return result;
         } catch (saveError) {
-          console.error(`[GNN-QUICK] Error during save/format:`, saveError.message);
+          logger.error(`Error during save/format:${saveError.message ? ": " + saveError.message : ""}`);
           // Still return result even if formatting/saving fails
           return {
             timestamp: new Date().toISOString(),
@@ -78,7 +78,7 @@ class GnnQuickScraper {
         }
 
       } catch (error) {
-        console.error(`[GNN-QUICK] Attempt ${attempt} failed:`, error.message);
+        logger.error(`Attempt ${attempt} failed:${error.message ? ": " + error.message : ""}`);
         
         if (attempt === this.config.MAX_RETRIES) {
           throw new Error(`Scraping failed after ${this.config.MAX_RETRIES} attempts: ${error.message}`);
@@ -163,7 +163,7 @@ class GnnQuickScraper {
     const filepath = path.join(__dirname, '../../../results/gnn', filename);
 
     await fs.promises.writeFile(filepath, JSON.stringify(data, null, 2), 'utf8');
-    console.log(`[GNN-QUICK] Results saved to: results/gnn/${filename}`);
+    // Results saved message will be logged by the main server
     
     return filename;
   }

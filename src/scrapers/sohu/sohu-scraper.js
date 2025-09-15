@@ -13,20 +13,20 @@ class SohuScraper {
     };
   }
 
-  async scrape() {
+  async scrape(logger = console) {
     let tabId = null;
     let page = null;
     let attempt = 1;
 
     while (attempt <= this.config.MAX_RETRIES) {
       try {
-        console.log(`[SOHU] Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
+        logger.info(`Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
         
         const tabInfo = await browserManager.getAvailableTab('sohu');
         tabId = tabInfo.tabId;
         page = tabInfo.page;
 
-        console.log('[SOHU] Loading sohu.com...');
+        logger.info('Loading sohu.com...');
         await page.goto(this.config.TARGET_URL, { 
           waitUntil: 'domcontentloaded',
           timeout: this.timeouts.PAGE_LOAD 
@@ -34,7 +34,7 @@ class SohuScraper {
 
         await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
 
-        console.log('[SOHU] Extracting links...');
+        logger.info('Extracting links...');
         const links = await page.$$eval(this.config.LINKS_SELECTOR, (elements) => {
           return elements.map(el => el.href);
         });
@@ -43,20 +43,20 @@ class SohuScraper {
           throw new Error('No links found with the specified selector');
         }
 
-        console.log(`[SOHU] Found ${links.length} links, extracting details in batches of ${this.config.BATCH_SIZE}...`);
+        logger.info(`Found ${links.length} links, extracting details in batches of ${this.config.BATCH_SIZE}...`);
         const detailedData = [];
 
         for (let i = 0; i < links.length; i += this.config.BATCH_SIZE) {
           const batch = links.slice(i, i + this.config.BATCH_SIZE);
-          console.log(`[SOHU] Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(links.length / this.config.BATCH_SIZE)} (${batch.length} links)`);
+          logger.info(`Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(links.length / this.config.BATCH_SIZE)} (${batch.length} links)`);
           
           const batchPromises = batch.map(async (link, index) => {
             try {
-              console.log(`[SOHU]   Processing link ${i + index + 1}/${links.length}: ${link}`);
+              logger.info(`  Processing link ${i + index + 1}/${links.length}: ${link}`);
               const details = await this.extractLinkDetails(link);
               return details;
             } catch (error) {
-              console.error(`[SOHU]   Failed to extract details from ${link}:`, error.message);
+              logger.error(`  Failed to extract details from ${link}: ${error.message}`);
               return {
                 href: link,
                 title: null,
@@ -72,7 +72,7 @@ class SohuScraper {
           detailedData.push(...batchResults);
           
           if (i + this.config.BATCH_SIZE < links.length) {
-            console.log(`[SOHU]   Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
+            logger.info(`  Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
             await new Promise(resolve => setTimeout(resolve, this.timeouts.BATCH_DELAY));
           }
         }
@@ -80,11 +80,11 @@ class SohuScraper {
         const result = this.formatResult(detailedData);
         await this.saveToFile(result);
 
-        console.log(`[SOHU] Successfully scraped ${links.length} links with details`);
+        logger.success(`Successfully scraped ${links.length} links with details`);
         return result;
 
       } catch (error) {
-        console.error(`[SOHU] Attempt ${attempt} failed:`, error.message);
+        logger.error(`Attempt ${attempt} failed: ${error.message}`);
         
         if (attempt === this.config.MAX_RETRIES) {
           throw new Error(`Scraping failed after ${this.config.MAX_RETRIES} attempts: ${error.message}`);
@@ -165,7 +165,7 @@ class SohuScraper {
     const filepath = path.join(__dirname, '../../../results/sohu', filename);
 
     await fs.promises.writeFile(filepath, JSON.stringify(data, null, 2), 'utf8');
-    console.log(`[SOHU] Results saved to: results/sohu/${filename}`);
+    // Results saved message will be logged by the main server
     
     return filename;
   }

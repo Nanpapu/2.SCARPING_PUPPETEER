@@ -13,14 +13,14 @@ class GamelookScraper {
     };
   }
 
-  async scrape() {
+  async scrape(logger = console) {
     let tabId = null;
     let page = null;
     let attempt = 1;
 
     while (attempt <= this.config.MAX_RETRIES) {
       try {
-        console.log(`[GAMELOOK] Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
+        logger.info(`Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
         
         const tabInfo = await browserManager.getAvailableTab('gamelook');
         tabId = tabInfo.tabId;
@@ -30,31 +30,31 @@ class GamelookScraper {
         const allLinks = [];
         for (let pageNum = this.config.START_PAGE; pageNum <= this.config.END_PAGE; pageNum++) {
           const pageUrl = this.config.PAGE_URL_TEMPLATE.replace('{page}', pageNum);
-          console.log(`[GAMELOOK] Loading page ${pageNum}: ${pageUrl}`);
+          logger.info(`Loading page ${pageNum}: ${pageUrl}`);
           
           const pageLinks = await this.extractLinksFromPage(pageUrl);
           allLinks.push(...pageLinks);
-          console.log(`[GAMELOOK] Found ${pageLinks.length} links from page ${pageNum}`);
+          logger.info(`Found ${pageLinks.length} links from page ${pageNum}`);
         }
 
         if (allLinks.length === 0) {
           throw new Error('No links found from any pages');
         }
 
-        console.log(`[GAMELOOK] Total found ${allLinks.length} links, extracting details in batches of ${this.config.BATCH_SIZE}...`);
+        logger.info(`Total found ${allLinks.length} links, extracting details in batches of ${this.config.BATCH_SIZE}...`);
         const detailedData = [];
 
         for (let i = 0; i < allLinks.length; i += this.config.BATCH_SIZE) {
           const batch = allLinks.slice(i, i + this.config.BATCH_SIZE);
-          console.log(`[GAMELOOK] Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(allLinks.length / this.config.BATCH_SIZE)} (${batch.length} links)`);
+          logger.info(`Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(allLinks.length / this.config.BATCH_SIZE)} (${batch.length} links)`);
           
           const batchPromises = batch.map(async (link, index) => {
             try {
-              console.log(`[GAMELOOK]   Processing link ${i + index + 1}/${allLinks.length}: ${link}`);
+              logger.info(`  Processing link ${i + index + 1}/${allLinks.length}: ${link}`);
               const details = await this.extractLinkDetails(link);
               return details;
             } catch (error) {
-              console.error(`[GAMELOOK]   Failed to extract details from ${link}:`, error.message);
+              logger.error(`  Failed to extract details from ${link}:${error.message ? ": " + error.message : ""}`);
               return {
                 href: link,
                 title: null,
@@ -69,7 +69,7 @@ class GamelookScraper {
           detailedData.push(...batchResults);
           
           if (i + this.config.BATCH_SIZE < allLinks.length) {
-            console.log(`[GAMELOOK]   Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
+            logger.info(`  Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
             await new Promise(resolve => setTimeout(resolve, this.timeouts.BATCH_DELAY));
           }
         }
@@ -77,11 +77,11 @@ class GamelookScraper {
         const result = this.formatResult(detailedData);
         await this.saveToFile(result);
 
-        console.log(`[GAMELOOK] Successfully scraped ${allLinks.length} links with details`);
+        logger.info(`Successfully scraped ${allLinks.length} links with details`);
         return result;
 
       } catch (error) {
-        console.error(`[GAMELOOK] Attempt ${attempt} failed:`, error.message);
+        logger.error(`Attempt ${attempt} failed:${error.message ? ": " + error.message : ""}`);
         
         if (attempt === this.config.MAX_RETRIES) {
           throw new Error(`Scraping failed after ${this.config.MAX_RETRIES} attempts: ${error.message}`);
@@ -189,7 +189,7 @@ class GamelookScraper {
     const filepath = path.join(__dirname, '../../../results/gamelook', filename);
 
     await fs.promises.writeFile(filepath, JSON.stringify(data, null, 2), 'utf8');
-    console.log(`[GAMELOOK] Results saved to: results/gamelook/${filename}`);
+    // Results saved message will be logged by the main server
     
     return filename;
   }

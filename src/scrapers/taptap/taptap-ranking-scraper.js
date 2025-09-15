@@ -13,37 +13,37 @@ class TapTapRankingScraper {
     };
   }
 
-  async scrape() {
+  async scrape(logger = console) {
     let tabId = null;
     let page = null;
     let attempt = 1;
 
     while (attempt <= this.config.MAX_RETRIES) {
       try {
-        console.log(`[TAPTAP] Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
+        logger.info(`Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
         
         const tabInfo = await browserManager.getAvailableTab('taptap');
         tabId = tabInfo.tabId;
         page = tabInfo.page;
 
-        console.log('[TAPTAP] Loading ranking page...');
+        logger.info('Loading ranking page...');
         await page.goto(this.config.TARGET_URL, {
           waitUntil: 'networkidle0',
           timeout: this.timeouts.PAGE_LOAD
         });
 
-        console.log('[TAPTAP] Page loaded, waiting for content...');
+        logger.info('Page loaded, waiting for content...');
         await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
 
         // Try to wait for some content to appear
         try {
           await page.waitForSelector('body', { timeout: 5000 });
-          console.log('[TAPTAP] Body element found');
+          logger.info('Body element found');
         } catch (error) {
-          console.log('[TAPTAP] Warning: Could not find body element');
+          logger.info('Warning: Could not find body element');
         }
 
-        console.log(`[TAPTAP] Scrolling to load ${this.config.TARGET_RANK} games...`);
+        logger.info(`Scrolling to load ${this.config.TARGET_RANK} games...`);
         const allGames = await this.scrollAndCollectGames(page);
 
         if (allGames.length === 0) {
@@ -52,16 +52,16 @@ class TapTapRankingScraper {
 
         // Limit to target rank
         const limitedGames = allGames.slice(0, this.config.TARGET_RANK);
-        console.log(`[TAPTAP] Collected ${limitedGames.length} games (target: ${this.config.TARGET_RANK})`);
+        logger.info(`Collected ${limitedGames.length} games (target: ${this.config.TARGET_RANK})`);
 
         const result = this.formatResult(limitedGames);
         await this.saveToFile(result);
 
-        console.log(`[TAPTAP] Successfully scraped ${limitedGames.length} games`);
+        logger.info(`Successfully scraped ${limitedGames.length} games`);
         return result;
 
       } catch (error) {
-        console.error(`[TAPTAP] Attempt ${attempt} failed:`, error.message);
+        logger.error(`Attempt ${attempt} failed:${error.message ? ": " + error.message : ""}`);
         
         if (attempt === this.config.MAX_RETRIES) {
           throw new Error(`Scraping failed after ${this.config.MAX_RETRIES} attempts: ${error.message}`);
@@ -78,14 +78,14 @@ class TapTapRankingScraper {
   }
 
   async scrollAndCollectGames(page) {
-    console.log(`[TAPTAP] Fast scrolling to load pages 1-${this.config.TARGET_PAGE}...`);
+    logger.info(`Fast scrolling to load pages 1-${this.config.TARGET_PAGE}...`);
 
     // Fast scroll until we have all pages loaded
     let scrollAttempts = 0;
     let targetPageFound = false;
 
     while (!targetPageFound && scrollAttempts < this.config.INFINITE_SCROLL.MAX_SCROLL_ATTEMPTS) {
-      console.log(`[TAPTAP] Fast scroll attempt ${scrollAttempts + 1}`);
+      logger.info(`Fast scroll attempt ${scrollAttempts + 1}`);
 
       // Check current pages loaded
       const currentPages = await page.evaluate((targetPage) => {
@@ -103,7 +103,7 @@ class TapTapRankingScraper {
 
       // Check if target page is loaded
       if (currentPages.length === this.config.TARGET_PAGE && currentPages[currentPages.length - 1].page === this.config.TARGET_PAGE) {
-        console.log(`[TAPTAP] All pages 1-${this.config.TARGET_PAGE} loaded successfully!`);
+        logger.info(`All pages 1-${this.config.TARGET_PAGE} loaded successfully!`);
         targetPageFound = true;
         break;
       }
@@ -119,11 +119,11 @@ class TapTapRankingScraper {
     }
 
     if (!targetPageFound) {
-      console.log(`[TAPTAP] Warning: Could not load all pages after ${scrollAttempts} attempts`);
+      logger.info(`Warning: Could not load all pages after ${scrollAttempts} attempts`);
     }
 
     // Now extract all games from loaded pages
-    console.log(`[TAPTAP] Extracting games from all loaded pages...`);
+    logger.info(`Extracting games from all loaded pages...`);
     const allGames = await this.extractAllGamesFromPages(page);
 
     return allGames;
@@ -252,7 +252,7 @@ class TapTapRankingScraper {
       return results;
     }, this.config.GAME_CONTAINER_SELECTOR, this.config.RANKING_SELECTORS, this.config.TARGET_PAGE);
 
-    console.log(`[TAPTAP] Extracted ${allGames.length} games from ${this.config.TARGET_PAGE} pages`);
+    logger.info(`Extracted ${allGames.length} games from ${this.config.TARGET_PAGE} pages`);
     return allGames;
   }
 
@@ -404,7 +404,7 @@ class TapTapRankingScraper {
     const filepath = path.join(__dirname, '../../../results/taptap', filename);
 
     await fs.promises.writeFile(filepath, JSON.stringify(data, null, 2), 'utf8');
-    console.log(`[TAPTAP] Results saved to: results/taptap/${filename}`);
+    // Results saved message will be logged by the main server
     
     return filename;
   }

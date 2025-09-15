@@ -13,20 +13,20 @@ class NineGameRankingListScraper {
     };
   }
 
-  async scrape() {
+  async scrape(logger = console) {
     let tabId = null;
     let page = null;
     let attempt = 1;
 
     while (attempt <= this.config.MAX_RETRIES) {
       try {
-        console.log(`[9GAME] Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
+        logger.info(`Scraping attempt ${attempt}/${this.config.MAX_RETRIES}`);
         
         const tabInfo = await browserManager.getAvailableTab('9game');
         tabId = tabInfo.tabId;
         page = tabInfo.page;
 
-        console.log('[9GAME] Loading ranking page...');
+        logger.info('Loading ranking page...');
         await page.goto(this.config.TARGET_URL, { 
           waitUntil: 'domcontentloaded',
           timeout: this.timeouts.PAGE_LOAD 
@@ -34,23 +34,23 @@ class NineGameRankingListScraper {
 
         await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
 
-        console.log('[9GAME] Extracting ranking data...');
+        logger.info('Extracting ranking data...');
         const rankingData = await this.extractRankingData(page);
 
         if (rankingData.length === 0) {
           throw new Error('No ranking data found');
         }
 
-        console.log(`[9GAME] Found ${rankingData.length} games, extracting details in batches of ${this.config.BATCH_SIZE}...`);
+        logger.info(`Found ${rankingData.length} games, extracting details in batches of ${this.config.BATCH_SIZE}...`);
         const detailedData = [];
 
         for (let i = 0; i < rankingData.length; i += this.config.BATCH_SIZE) {
           const batch = rankingData.slice(i, i + this.config.BATCH_SIZE);
-          console.log(`[9GAME] Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(rankingData.length / this.config.BATCH_SIZE)} (${batch.length} games)`);
+          logger.info(`Processing batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(rankingData.length / this.config.BATCH_SIZE)} (${batch.length} games)`);
           
           const batchPromises = batch.map(async (item, index) => {
             try {
-              console.log(`[9GAME]   Processing game ${i + index + 1}/${rankingData.length}: ${item.link}`);
+              logger.info(`  Processing game ${i + index + 1}/${rankingData.length}: ${item.link}`);
               const details = await this.extractGameDetails(item.link);
               return {
                 rank: item.rank,
@@ -58,7 +58,7 @@ class NineGameRankingListScraper {
                 ...details
               };
             } catch (error) {
-              console.error(`[9GAME]   Failed to extract details from ${item.link}:`, error.message);
+              logger.error(`  Failed to extract details from ${item.link}:${error.message ? ": " + error.message : ""}`);
               return {
                 rank: item.rank,
                 link: item.link,
@@ -75,7 +75,7 @@ class NineGameRankingListScraper {
           detailedData.push(...batchResults);
           
           if (i + this.config.BATCH_SIZE < rankingData.length) {
-            console.log(`[9GAME]   Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
+            logger.info(`  Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
             await new Promise(resolve => setTimeout(resolve, this.timeouts.BATCH_DELAY));
           }
         }
@@ -83,11 +83,11 @@ class NineGameRankingListScraper {
         const result = this.formatResult(detailedData);
         await this.saveToFile(result);
 
-        console.log(`[9GAME] Successfully scraped ${rankingData.length} games with details`);
+        logger.info(`Successfully scraped ${rankingData.length} games with details`);
         return result;
 
       } catch (error) {
-        console.error(`[9GAME] Attempt ${attempt} failed:`, error.message);
+        logger.error(`Attempt ${attempt} failed:${error.message ? ": " + error.message : ""}`);
         
         if (attempt === this.config.MAX_RETRIES) {
           throw new Error(`Scraping failed after ${this.config.MAX_RETRIES} attempts: ${error.message}`);
@@ -143,7 +143,7 @@ class NineGameRankingListScraper {
       
       // If day is null/empty, try unreleased game selectors
       if (!details.day) {
-        console.log(`[9GAME]     Game appears unreleased, trying unreleased selectors...`);
+        logger.info(`    Game appears unreleased, trying unreleased selectors...`);
         details = await this.tryExtractDetails(page, this.config.DETAILS_SELECTORS.unreleased, url);
       }
 
@@ -230,7 +230,7 @@ class NineGameRankingListScraper {
     const filepath = path.join(__dirname, '../../../results/9game', filename);
 
     await fs.promises.writeFile(filepath, JSON.stringify(data, null, 2), 'utf8');
-    console.log(`[9GAME] Results saved to: results/9game/${filename}`);
+    // Results saved message will be logged by the main server
     
     return filename;
   }
