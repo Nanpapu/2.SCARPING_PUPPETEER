@@ -5,6 +5,7 @@ const GamelookScraper = require('./scrapers/gamelook/gamelook-scraper');
 const NineGameRankingListScraper = require('./scrapers/9game/9game-ranking-list-scraper');
 const GnnQuickScraper = require('./scrapers/gnn/gnn-quick-scraper');
 const TapTapRankingScraper = require('./scrapers/taptap/taptap-ranking-scraper');
+const { Logger, generateRequestId } = require('./utils/logger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -62,115 +63,150 @@ app.get('/health', (req, res) => {
 });
 
 app.post('/api/scrape/sohu', async (req, res) => {
+  const requestId = generateRequestId();
+  const logger = new Logger('sohu', requestId);
+
   try {
-    console.log('[SERVER] Sohu manual scrape triggered');
+    logger.info('Sohu manual scrape triggered');
     const result = await scrapers.sohu.scrape();
-    
+
+    logger.success(`Sohu scraping completed successfully. Items scraped: ${result.items ? result.items.length : 'N/A'}`);
+
     res.json({
       success: true,
       message: 'Sohu scraping completed successfully',
       scraper: 'sohu',
+      requestId: requestId,
       data: result
     });
   } catch (error) {
-    console.error('[SERVER] Sohu scraping failed:', error.message);
-    
+    logger.error(`Sohu scraping failed: ${error.message}`);
+
     res.status(500).json({
       success: false,
       message: 'Sohu scraping failed',
       scraper: 'sohu',
+      requestId: requestId,
       error: error.message
     });
   }
 });
 
 app.post('/api/scrape/gamelook', async (req, res) => {
+  const requestId = generateRequestId();
+  const logger = new Logger('gamelook', requestId);
+
   try {
-    console.log('[SERVER] Gamelook manual scrape triggered');
+    logger.info('Gamelook manual scrape triggered');
     const result = await scrapers.gamelook.scrape();
-    
+
+    logger.success(`Gamelook scraping completed successfully. Items scraped: ${result.items ? result.items.length : 'N/A'}`);
+
     res.json({
       success: true,
       message: 'Gamelook scraping completed successfully',
       scraper: 'gamelook',
+      requestId: requestId,
       data: result
     });
   } catch (error) {
-    console.error('[SERVER] Gamelook scraping failed:', error.message);
-    
+    logger.error(`Gamelook scraping failed: ${error.message}`);
+
     res.status(500).json({
       success: false,
       message: 'Gamelook scraping failed',
       scraper: 'gamelook',
+      requestId: requestId,
       error: error.message
     });
   }
 });
 
 app.post('/api/scrape/9game', async (req, res) => {
+  const requestId = generateRequestId();
+  const logger = new Logger('9game', requestId);
+
   try {
-    console.log('[SERVER] 9Game manual scrape triggered');
+    logger.info('9Game manual scrape triggered');
     const result = await scrapers['9game'].scrape();
-    
+
+    logger.success(`9Game scraping completed successfully. Items scraped: ${result.items ? result.items.length : 'N/A'}`);
+
     res.json({
       success: true,
       message: '9Game scraping completed successfully',
       scraper: '9game',
+      requestId: requestId,
       data: result
     });
   } catch (error) {
-    console.error('[SERVER] 9Game scraping failed:', error.message);
-    
+    logger.error(`9Game scraping failed: ${error.message}`);
+
     res.status(500).json({
       success: false,
       message: '9Game scraping failed',
       scraper: '9game',
+      requestId: requestId,
       error: error.message
     });
   }
 });
 
 app.post('/api/scrape/gnn', async (req, res) => {
+  const requestId = generateRequestId();
+  const logger = new Logger('gnn', requestId);
+
   try {
-    console.log('[SERVER] GNN manual scrape triggered');
+    logger.info('GNN manual scrape triggered');
     const result = await scrapers.gnn.scrape();
-    
+
+    logger.success(`GNN scraping completed successfully. Items scraped: ${result.items ? result.items.length : 'N/A'}`);
+
     res.json({
       success: true,
       message: 'GNN scraping completed successfully',
       scraper: 'gnn',
+      requestId: requestId,
       data: result
     });
   } catch (error) {
-    console.error('[SERVER] GNN scraping failed:', error.message);
-    
+    logger.error(`GNN scraping failed: ${error.message}`);
+
     res.status(500).json({
       success: false,
       message: 'GNN scraping failed',
       scraper: 'gnn',
+      requestId: requestId,
       error: error.message
     });
   }
 });
 
 app.post('/api/scrape/taptap', async (req, res) => {
+  const requestId = generateRequestId();
+  const logger = new Logger('taptap', requestId);
+
   try {
-    console.log('[SERVER] TapTap manual scrape triggered');
+    logger.info('TapTap manual scrape triggered');
     const result = await scrapers.taptap.scrape();
-    
+
+    logger.success(`TapTap scraping completed successfully. Items scraped: ${result.items ? result.items.length : 'N/A'}`);
+
     res.json({
       success: true,
       message: 'TapTap scraping completed successfully',
       scraper: 'taptap',
+      requestId: requestId,
       data: result
     });
   } catch (error) {
-    console.error('[SERVER] TapTap scraping failed:', error.message);
-    
+    logger.error(`TapTap scraping failed: ${error.message}`);
+
     res.status(500).json({
       success: false,
       message: 'TapTap scraping failed',
       scraper: 'taptap',
+      requestId: requestId,
       error: error.message
     });
   }
