@@ -9,7 +9,39 @@ const TapTapRankingScraper = require('./scrapers/taptap/taptap-ranking-scraper')
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy to get real client IP
+app.set('trust proxy', true);
+
 app.use(express.json());
+
+// IP Whitelist Configuration
+const ALLOWED_IPS = ['103.82.29.1', '103.82.29.2', '103.82.29.3'];
+
+// IP Whitelist Middleware
+const ipWhitelist = (req, res, next) => {
+  const clientIP = req.ip || req.connection.remoteAddress || req.socket.remoteAddress ||
+                   (req.connection.socket ? req.connection.socket.remoteAddress : null);
+
+  // Handle IPv6-mapped IPv4 addresses (::ffff:x.x.x.x)
+  const cleanIP = clientIP && clientIP.includes('::ffff:') ? clientIP.replace('::ffff:', '') : clientIP;
+
+  console.log(`[IP CHECK] Client IP: ${cleanIP}, Original: ${clientIP}`);
+
+  if (!cleanIP || !ALLOWED_IPS.includes(cleanIP)) {
+    console.log(`[IP BLOCKED] Access denied for IP: ${cleanIP}`);
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied: IP not whitelisted',
+      clientIP: cleanIP
+    });
+  }
+
+  console.log(`[IP ALLOWED] Access granted for IP: ${cleanIP}`);
+  next();
+};
+
+// Apply IP whitelist to all API routes (except health check)
+app.use('/api', ipWhitelist);
 
 // Initialize scrapers
 const scrapers = {
