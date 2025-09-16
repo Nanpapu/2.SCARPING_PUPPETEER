@@ -66,6 +66,9 @@ class BaiduScraper {
   }
 
   async extractRankingData(page, logger) {
+    logger.info('Looking for Load More button to load full rankings...');
+    await this.clickLoadMoreButton(page, logger);
+
     const allRankingData = [];
 
     const columns = [
@@ -79,8 +82,6 @@ class BaiduScraper {
 
       try {
         await page.waitForSelector(column.selector, { timeout: 10000 });
-
-        await this.clickLoadMoreButton(page, column.selector, logger);
 
         const columnData = await page.evaluate((columnSelector, typeListSelector, rankItemSelector, gameLinkSelector, rankSpanSelector, columnType) => {
           const columnElement = document.querySelector(columnSelector);
@@ -127,59 +128,54 @@ class BaiduScraper {
     return allRankingData;
   }
 
-  async clickLoadMoreButton(page, columnSelector, logger) {
+  async clickLoadMoreButton(page, logger) {
     try {
       let loadMoreFound = false;
       let scrollAttempts = 0;
       const maxScrollAttempts = 10;
 
       while (!loadMoreFound && scrollAttempts < maxScrollAttempts) {
-        const loadMoreExists = await page.evaluate((columnSelector, loadMoreSelector, verifyText) => {
-          const columnElement = document.querySelector(columnSelector);
-          if (!columnElement) return false;
+        const loadMoreExists = await page.evaluate((parentSelector, loadMoreSelector, verifyText) => {
+          const parentElement = document.querySelector(parentSelector);
+          if (!parentElement) return false;
 
-          const loadMoreButton = columnElement.querySelector(loadMoreSelector);
+          const loadMoreButton = parentElement.querySelector(loadMoreSelector);
           if (!loadMoreButton) return false;
 
           const hasCorrectText = loadMoreButton.textContent.includes(verifyText);
           const isVisible = loadMoreButton.offsetParent !== null;
           return hasCorrectText && isVisible;
-        }, columnSelector, this.config.RANKING_SELECTORS.load_more_button, this.config.LOAD_MORE_SELECTORS.verify_text);
+        }, this.config.RANKING_SELECTORS.parent_container, this.config.RANKING_SELECTORS.load_more_button, this.config.LOAD_MORE_SELECTORS.verify_text);
 
         if (loadMoreExists) {
           logger.info('Found "Load More" button, clicking to load full ranking...');
           loadMoreFound = true;
 
-          await page.evaluate((columnSelector, loadMoreSelector) => {
-            const columnElement = document.querySelector(columnSelector);
-            const loadMoreButton = columnElement.querySelector(loadMoreSelector);
+          await page.evaluate((parentSelector, loadMoreSelector) => {
+            const parentElement = document.querySelector(parentSelector);
+            const loadMoreButton = parentElement.querySelector(loadMoreSelector);
             if (loadMoreButton) {
               loadMoreButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
               setTimeout(() => loadMoreButton.click(), 500);
             }
-          }, columnSelector, this.config.RANKING_SELECTORS.load_more_button);
+          }, this.config.RANKING_SELECTORS.parent_container, this.config.RANKING_SELECTORS.load_more_button);
 
           await page.waitForTimeout(this.timeouts.WAIT_AFTER_CLICK);
 
-          await page.waitForFunction((columnSelector, rankItemSelector) => {
-            const columnElement = document.querySelector(columnSelector);
-            if (!columnElement) return false;
-            const items = columnElement.querySelectorAll(rankItemSelector);
-            return items.length >= 40;
-          }, { timeout: this.timeouts.WAIT_FOR_LOAD_MORE }, columnSelector, this.config.RANKING_SELECTORS.rank_item);
+          await page.waitForFunction((parentSelector, rankItemSelector) => {
+            const parentElement = document.querySelector(parentSelector);
+            if (!parentElement) return false;
+            const items = parentElement.querySelectorAll(rankItemSelector);
+            return items.length >= 120;
+          }, { timeout: this.timeouts.WAIT_FOR_LOAD_MORE }, this.config.RANKING_SELECTORS.parent_container, this.config.RANKING_SELECTORS.rank_item);
 
           logger.info('Successfully loaded more ranking items');
         } else {
           logger.info(`Scroll attempt ${scrollAttempts + 1}/${maxScrollAttempts}: Load More button not found, scrolling down...`);
 
-          await page.evaluate((columnSelector) => {
-            const columnElement = document.querySelector(columnSelector);
-            if (columnElement) {
-              columnElement.scrollBy(0, 300);
-            } else {
-              window.scrollBy(0, 300);
-            }
-          }, columnSelector);
+          await page.evaluate(() => {
+            window.scrollBy(0, 300);
+          });
 
           await page.waitForTimeout(1000);
           scrollAttempts++;
