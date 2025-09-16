@@ -175,6 +175,35 @@ const SCRAPER_CONFIGS = {
       WAIT_AFTER_DETAIL: 8000,
       BATCH_DELAY: 3000
     }
+  },
+
+  baidu: {
+    BATCH_SIZE: 50,
+    MAX_RETRIES: 3,
+    TARGET_URL: 'https://lewan.baidu.com/rankland?gameSource=standalone',
+    RANKING_SELECTORS: {
+      main_container: 'div.rank-list-containers.standalone-rank',
+      annual_column: 'div.game-type-rank-wrap.annual-wrap',
+      new_column: 'div.game-type-rank-wrap.new-wrap',
+      upcoming_column: 'div.game-type-rank-wrap.upcoming-wrap',
+      type_list_content: 'div.type-list-content',
+      rank_item: 'div.rank-list-item',
+      game_link: 'a',
+      rank_span: 'div.unfold-status-item span.rank-query',
+      load_more_button: 'div.go-more-link'
+    },
+    LOAD_MORE_SELECTORS: {
+      button_container: 'div.go-more-link',
+      verify_text: '查看更多'
+    },
+    CUSTOM_TIMEOUTS: {
+      PAGE_LOAD: 60000,
+      WAIT_AFTER_LOAD: 10000,
+      WAIT_FOR_LOAD_MORE: 5000,
+      WAIT_AFTER_CLICK: 3000,
+      MAX_WAIT_FOR_CONTENT: 30000,
+      BATCH_DELAY: 2000
+    }
   }
 };
 

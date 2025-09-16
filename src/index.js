@@ -5,6 +5,7 @@ const GamelookScraper = require('./scrapers/gamelook/gamelook-scraper');
 const NineGameRankingListScraper = require('./scrapers/9game/9game-ranking-list-scraper');
 const GnnQuickScraper = require('./scrapers/gnn/gnn-quick-scraper');
 const TapTapRankingScraper = require('./scrapers/taptap/taptap-ranking-scraper');
+const BaiduScraper = require('./scrapers/baidu/baidu-scraper');
 const { Logger, generateRequestId } = require('./utils/logger');
 
 const app = express();
@@ -50,7 +51,8 @@ const scrapers = {
   gamelook: new GamelookScraper(),
   '9game': new NineGameRankingListScraper(),
   gnn: new GnnQuickScraper(),
-  taptap: new TapTapRankingScraper()
+  taptap: new TapTapRankingScraper(),
+  baidu: new BaiduScraper()
 };
 
 app.get('/health', (req, res) => {
@@ -212,6 +214,36 @@ app.post('/api/scrape/taptap', async (req, res) => {
   }
 });
 
+app.post('/api/scrape/baidu', async (req, res) => {
+  const requestId = generateRequestId();
+  const logger = new Logger('baidu', requestId);
+
+  try {
+    logger.info('Baidu manual scrape triggered');
+    const result = await scrapers.baidu.scrape(logger);
+
+    logger.success(`Baidu scraping completed successfully. Items scraped: ${result.data ? result.data.length : result.total || 'N/A'}`);
+
+    res.json({
+      success: true,
+      message: 'Baidu scraping completed successfully',
+      scraper: 'baidu',
+      requestId: requestId,
+      data: result
+    });
+  } catch (error) {
+    logger.error(`Baidu scraping failed: ${error.message}`);
+
+    res.status(500).json({
+      success: false,
+      message: 'Baidu scraping failed',
+      scraper: 'baidu',
+      requestId: requestId,
+      error: error.message
+    });
+  }
+});
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Multi-website scraper server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
@@ -221,6 +253,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`9Game scraper: POST http://localhost:${PORT}/api/scrape/9game`);
   console.log(`GNN scraper: POST http://localhost:${PORT}/api/scrape/gnn`);
   console.log(`TapTap scraper: POST http://localhost:${PORT}/api/scrape/taptap`);
+  console.log(`Baidu scraper: POST http://localhost:${PORT}/api/scrape/baidu`);
 });
 
 // Set server timeout to 30 minutes (1800000ms) to prevent timeouts during long scraping operations
