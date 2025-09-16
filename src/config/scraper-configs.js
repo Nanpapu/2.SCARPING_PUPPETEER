@@ -115,14 +115,14 @@ const SCRAPER_CONFIGS = {
     BATCH_SIZE: 20,
     MAX_RETRIES: 3,
     TARGET_URLS: [
-      { url: 'https://www.taptap.cn/top/download?os=pc', source: 'download' },
-      { url: 'https://www.taptap.cn/top/reserve?os=pc', source: 'reserve' }
+      { url: 'https://www.taptap.cn/top/download?os=pc', source: 'download' }
+      // { url: 'https://www.taptap.cn/top/reserve?os=pc', source: 'reserve' }
     ],
-    TARGET_RANK: 50,
+    TARGET_RANK: 10,
     ITEMS_PER_SCROLL: 10,
     GAME_CONTAINER_SELECTOR: 'div.list-item',
-    TARGET_PAGE: 5,
-    SCROLL_TO_PAGE: 6,
+    TARGET_PAGE: 1,
+    SCROLL_TO_PAGE: 3,
     RANKING_SELECTORS: {
       rank: 'span[class*="data-v-ea802df3"]',
       title: 'div.text-with-tags.app-title span',
@@ -134,13 +134,31 @@ const SCRAPER_CONFIGS = {
       image_fallback: 'img[data-v-b7568bee].tap-image.app-icon__img'
     },
     DETAILS_SELECTORS: {
-      release_date: 'div.tap-text.tap-text__one-line.single-info__content__value.gray-07[data-v-0e365061]'
+      release_date: 'div.tap-text.tap-text__one-line.single-info__content__value.gray-07[data-v-0e365061]',
+      developer: {
+        container: 'div.row-card__content div.app-intro__item',
+        wrapper_div: 'div.flex-center--y[data-v-c22f6d57=""]',
+        link_selector: 'a.tap-router.tap-router__prefetched.flex-center--y.mb-6',
+        label_text: '开发'
+      },
+      publisher: {
+        container: 'div.row-card__content div.app-intro__item',
+        wrapper_div: 'div.flex-center--y[data-v-c22f6d57=""]',
+        link_selector: 'a.tap-router.tap-router__prefetched.flex-center--y.mb-6',
+        label_text: '发行'
+      },
+      supplier: {
+        container: 'div.row-card__content div.app-intro__item',
+        text_container: 'div[data-v-cd2f7eea][data-v-c22f6d57].tap-text.tap-text__multi-line.flex.mt-6',
+        supplier_info: 'div[data-v-cd2f7eea].flex-center--y.privacy-policy-info.caption-m10-w12.gray-06',
+        label_text: '供应商'
+      }
     },
     INFINITE_SCROLL: {
       SCROLL_DELAY: 2000,
       WAIT_FOR_LOAD: 1000,
-      MAX_SCROLL_ATTEMPTS: 15,
-      FAST_SCROLL_PIXELS: 1000
+      MAX_SCROLL_ATTEMPTS: 50,
+      FAST_SCROLL_PIXELS: 300
     },
     CUSTOM_TIMEOUTS: {
       PAGE_LOAD: 600000,

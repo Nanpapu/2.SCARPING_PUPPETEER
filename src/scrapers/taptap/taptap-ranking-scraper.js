@@ -72,8 +72,8 @@ class TapTapRankingScraper {
 
         logger.info(`Total collected ${allGamesFromAllSources.length} games from ${this.config.TARGET_URLS.length} sources`);
 
-        // Extract release dates in batches
-        logger.info(`Extracting release dates in batches of ${this.config.BATCH_SIZE}...`);
+        // Extract detailed game information in batches
+        logger.info(`Extracting game details (release date, developer, publisher, supplier) in batches of ${this.config.BATCH_SIZE}...`);
         const detailedGames = [];
 
         for (let i = 0; i < allGamesFromAllSources.length; i += this.config.BATCH_SIZE) {
@@ -83,16 +83,22 @@ class TapTapRankingScraper {
           const batchPromises = batch.map(async (game, index) => {
             try {
               logger.info(`  Processing game ${i + index + 1}/${allGamesFromAllSources.length}: ${game.title} (${game.source})`);
-              const releaseDate = await this.extractReleaseDate(game.gameLink, logger);
+              const gameDetails = await this.extractGameDetails(game.gameLink, logger);
               return {
                 ...game,
-                releaseDate: releaseDate
+                releaseDate: gameDetails.releaseDate,
+                developer: gameDetails.developer,
+                publisher: gameDetails.publisher,
+                supplier: gameDetails.supplier
               };
             } catch (error) {
-              logger.error(`  Failed to extract release date from ${game.gameLink}:${error.message ? ": " + error.message : ""}`);
+              logger.error(`  Failed to extract game details from ${game.gameLink}:${error.message ? ": " + error.message : ""}`);
               return {
                 ...game,
-                releaseDate: null
+                releaseDate: null,
+                developer: null,
+                publisher: null,
+                supplier: null
               };
             }
           });
@@ -109,7 +115,7 @@ class TapTapRankingScraper {
         const result = this.formatResult(detailedGames);
         await this.saveToFile(result);
 
-        logger.info(`Successfully scraped ${allGamesFromAllSources.length} games with release dates`);
+        logger.info(`Successfully scraped ${allGamesFromAllSources.length} games with detailed information`);
         return result;
 
       } catch (error) {
@@ -498,9 +504,14 @@ class TapTapRankingScraper {
     return filename;
   }
 
-  async extractReleaseDate(gameLink, logger = console) {
+  async extractGameDetails(gameLink, logger = console) {
     if (!gameLink || gameLink === 'N/A') {
-      return null;
+      return {
+        releaseDate: null,
+        developer: null,
+        publisher: null,
+        supplier: null
+      };
     }
 
     const tabInfo = await browserManager.getAvailableTab('taptap-detail');
@@ -514,32 +525,110 @@ class TapTapRankingScraper {
 
       await page.waitForTimeout(this.timeouts.WAIT_AFTER_DETAIL);
 
-      const releaseDate = await page.evaluate((primarySelector) => {
-        // Try multiple selectors for release date
-        const selectors = [
-          primarySelector,
+      const gameDetails = await page.evaluate((selectors) => {
+        const result = {
+          releaseDate: null,
+          developer: null,
+          publisher: null,
+          supplier: null
+        };
+
+        // Extract release date
+        const releaseDateSelectors = [
+          selectors.release_date,
           'div.tap-text.tap-text__one-line.single-info__content__value.gray-07',
           'div[data-v-0e365061]',
           '.single-info__content__value'
         ];
 
-        for (const selector of selectors) {
+        for (const selector of releaseDateSelectors) {
           const elements = document.querySelectorAll(selector);
-
-          // Look for date pattern in text content
           for (const element of elements) {
             const text = element.textContent.trim();
-            // Match YYYY-MM-DD pattern
             if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-              return text;
+              result.releaseDate = text;
+              break;
+            }
+          }
+          if (result.releaseDate) break;
+        }
+
+        // Extract developer and publisher
+        console.log('DEBUG: Starting developer/publisher extraction');
+
+        // Try broader search for app-intro section
+        const appIntroItems = document.querySelectorAll('div.app-intro__item, .app-intro__item, div[class*="app-intro"]');
+        console.log('DEBUG: Found app-intro items:', appIntroItems.length);
+
+        for (let i = 0; i < appIntroItems.length; i++) {
+          const item = appIntroItems[i];
+          console.log(`DEBUG: Processing app-intro item ${i + 1}`);
+
+          // Look for any div with data-v-c22f6d57 attribute
+          const dataDivs = item.querySelectorAll('div[data-v-c22f6d57]');
+          console.log(`DEBUG: Found ${dataDivs.length} divs with data-v-c22f6d57`);
+
+          for (let j = 0; j < dataDivs.length; j++) {
+            const dataDiv = dataDivs[j];
+            console.log(`DEBUG: Processing data div ${j + 1}`);
+
+            // Look for all anchor tags within
+            const links = dataDiv.querySelectorAll('a');
+            console.log(`DEBUG: Found ${links.length} anchor tags in data div`);
+
+            for (let k = 0; k < links.length; k++) {
+              const link = links[k];
+              console.log(`DEBUG: Processing link ${k + 1}`);
+
+              // Get all div children inside the link
+              const divs = link.querySelectorAll('div');
+              console.log(`DEBUG: Found ${divs.length} divs inside link`);
+
+              for (let d = 0; d < divs.length; d++) {
+                const div = divs[d];
+                const text = div.textContent.trim();
+                console.log(`DEBUG: Div ${d + 1} text: "${text}"`);
+              }
+
+              if (divs.length >= 2) {
+                const labelDiv = divs[0];
+                const valueDiv = divs[1];
+
+                const labelText = labelDiv.textContent.trim();
+                const value = valueDiv.textContent.trim();
+
+                console.log(`DEBUG: Label: "${labelText}", Value: "${value}"`);
+
+                if (labelText === '开发' && !result.developer) {
+                  result.developer = value;
+                  console.log(`DEBUG: Set developer to: ${value}`);
+                } else if (labelText === '发行' && !result.publisher) {
+                  result.publisher = value;
+                  console.log(`DEBUG: Set publisher to: ${value}`);
+                }
+              }
             }
           }
         }
 
-        return null;
-      }, this.config.DETAILS_SELECTORS.release_date);
+        // Extract supplier
+        const supplierContainers = document.querySelectorAll(selectors.supplier.text_container);
+        for (const container of supplierContainers) {
+          const supplierInfo = container.querySelector(selectors.supplier.supplier_info);
+          if (supplierInfo) {
+            const text = supplierInfo.textContent.trim();
+            if (text.includes(selectors.supplier.label_text)) {
+              // Extract supplier name after "供应商 "
+              result.supplier = text.replace(selectors.supplier.label_text, '').trim();
+              break;
+            }
+          }
+        }
 
-      return releaseDate;
+        return result;
+      }, this.config.DETAILS_SELECTORS);
+
+      return gameDetails;
     } finally {
       await browserManager.releaseTab(tabId);
     }
