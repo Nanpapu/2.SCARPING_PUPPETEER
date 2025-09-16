@@ -182,6 +182,7 @@ const SCRAPER_CONFIGS = {
     MAX_RETRIES: 3,
     TARGET_URL: 'https://lewan.baidu.com/rankland?gameSource=standalone',
     RANKING_SELECTORS: {
+      parent_container: 'div.game-rank-total-wrap.ubc-show-item',
       main_container: 'div.rank-list-containers.standalone-rank',
       annual_column: 'div.game-type-rank-wrap.annual-wrap',
       new_column: 'div.game-type-rank-wrap.new-wrap',

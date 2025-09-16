@@ -129,40 +129,65 @@ class BaiduScraper {
 
   async clickLoadMoreButton(page, columnSelector, logger) {
     try {
-      const loadMoreExists = await page.evaluate((columnSelector, loadMoreSelector, verifyText) => {
-        const columnElement = document.querySelector(columnSelector);
-        if (!columnElement) return false;
+      let loadMoreFound = false;
+      let scrollAttempts = 0;
+      const maxScrollAttempts = 10;
 
-        const loadMoreButton = columnElement.querySelector(loadMoreSelector);
-        if (!loadMoreButton) return false;
-
-        const hasCorrectText = loadMoreButton.textContent.includes(verifyText);
-        return hasCorrectText;
-      }, columnSelector, this.config.RANKING_SELECTORS.load_more_button, this.config.LOAD_MORE_SELECTORS.verify_text);
-
-      if (loadMoreExists) {
-        logger.info('Found "Load More" button, clicking to load full ranking...');
-
-        await page.evaluate((columnSelector, loadMoreSelector) => {
-          const columnElement = document.querySelector(columnSelector);
-          const loadMoreButton = columnElement.querySelector(loadMoreSelector);
-          if (loadMoreButton) {
-            loadMoreButton.click();
-          }
-        }, columnSelector, this.config.RANKING_SELECTORS.load_more_button);
-
-        await page.waitForTimeout(this.timeouts.WAIT_AFTER_CLICK);
-
-        await page.waitForFunction((columnSelector, rankItemSelector) => {
+      while (!loadMoreFound && scrollAttempts < maxScrollAttempts) {
+        const loadMoreExists = await page.evaluate((columnSelector, loadMoreSelector, verifyText) => {
           const columnElement = document.querySelector(columnSelector);
           if (!columnElement) return false;
-          const items = columnElement.querySelectorAll(rankItemSelector);
-          return items.length >= 40;
-        }, { timeout: this.timeouts.WAIT_FOR_LOAD_MORE }, columnSelector, this.config.RANKING_SELECTORS.rank_item);
 
-        logger.info('Successfully loaded more ranking items');
-      } else {
-        logger.info('No "Load More" button found, using existing items');
+          const loadMoreButton = columnElement.querySelector(loadMoreSelector);
+          if (!loadMoreButton) return false;
+
+          const hasCorrectText = loadMoreButton.textContent.includes(verifyText);
+          const isVisible = loadMoreButton.offsetParent !== null;
+          return hasCorrectText && isVisible;
+        }, columnSelector, this.config.RANKING_SELECTORS.load_more_button, this.config.LOAD_MORE_SELECTORS.verify_text);
+
+        if (loadMoreExists) {
+          logger.info('Found "Load More" button, clicking to load full ranking...');
+          loadMoreFound = true;
+
+          await page.evaluate((columnSelector, loadMoreSelector) => {
+            const columnElement = document.querySelector(columnSelector);
+            const loadMoreButton = columnElement.querySelector(loadMoreSelector);
+            if (loadMoreButton) {
+              loadMoreButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              setTimeout(() => loadMoreButton.click(), 500);
+            }
+          }, columnSelector, this.config.RANKING_SELECTORS.load_more_button);
+
+          await page.waitForTimeout(this.timeouts.WAIT_AFTER_CLICK);
+
+          await page.waitForFunction((columnSelector, rankItemSelector) => {
+            const columnElement = document.querySelector(columnSelector);
+            if (!columnElement) return false;
+            const items = columnElement.querySelectorAll(rankItemSelector);
+            return items.length >= 40;
+          }, { timeout: this.timeouts.WAIT_FOR_LOAD_MORE }, columnSelector, this.config.RANKING_SELECTORS.rank_item);
+
+          logger.info('Successfully loaded more ranking items');
+        } else {
+          logger.info(`Scroll attempt ${scrollAttempts + 1}/${maxScrollAttempts}: Load More button not found, scrolling down...`);
+
+          await page.evaluate((columnSelector) => {
+            const columnElement = document.querySelector(columnSelector);
+            if (columnElement) {
+              columnElement.scrollBy(0, 300);
+            } else {
+              window.scrollBy(0, 300);
+            }
+          }, columnSelector);
+
+          await page.waitForTimeout(1000);
+          scrollAttempts++;
+        }
+      }
+
+      if (!loadMoreFound) {
+        logger.info('Load More button not found after scrolling, using existing items');
       }
     } catch (error) {
       logger.warn(`Failed to click load more button: ${error.message}`);
