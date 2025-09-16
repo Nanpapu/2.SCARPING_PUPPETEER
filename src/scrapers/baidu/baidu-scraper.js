@@ -34,6 +34,14 @@ class BaiduScraper {
 
         await page.waitForTimeout(this.timeouts.WAIT_AFTER_LOAD);
 
+        logger.info('Waiting for parent container to load...');
+        await page.waitForSelector(this.config.RANKING_SELECTORS.parent_container, {
+          timeout: this.timeouts.MAX_WAIT_FOR_CONTENT
+        });
+
+        logger.info('Selecting mobile games tab...');
+        await this.selectMobileTab(page, logger);
+
         logger.info('Waiting for main ranking container to load...');
         await page.waitForSelector(this.config.RANKING_SELECTORS.main_container, {
           timeout: this.timeouts.MAX_WAIT_FOR_CONTENT
@@ -62,6 +70,41 @@ class BaiduScraper {
           await browserManager.releaseTab(tabId);
         }
       }
+    }
+  }
+
+  async selectMobileTab(page, logger) {
+    try {
+      logger.info('Looking for mobile games tab...');
+
+      await page.waitForSelector(this.config.TAB_SELECTORS.tab_container, { timeout: 10000 });
+
+      const mobileTabFound = await page.evaluate((tabContainer, tabItems, mobileValue, mobileText) => {
+        const container = document.querySelector(tabContainer);
+        if (!container) return false;
+
+        const tabs = container.querySelectorAll(tabItems);
+        for (const tab of tabs) {
+          const hasValue = tab.querySelector(`div[value="${mobileValue}"]`);
+          const hasText = tab.textContent.includes(mobileText);
+
+          if (hasValue && hasText) {
+            tab.click();
+            return true;
+          }
+        }
+        return false;
+      }, this.config.TAB_SELECTORS.tab_container, this.config.TAB_SELECTORS.tab_items,
+         this.config.TAB_SELECTORS.mobile_tab_value, this.config.TAB_SELECTORS.mobile_tab_text);
+
+      if (mobileTabFound) {
+        logger.info('Successfully clicked mobile games tab (手机游戏)');
+        await page.waitForTimeout(this.timeouts.WAIT_FOR_TAB_CLICK);
+      } else {
+        logger.warn('Mobile games tab not found, proceeding with default tab');
+      }
+    } catch (error) {
+      logger.error(`Failed to select mobile tab: ${error.message}`);
     }
   }
 

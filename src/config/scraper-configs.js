@@ -181,9 +181,15 @@ const SCRAPER_CONFIGS = {
     BATCH_SIZE: 50,
     MAX_RETRIES: 3,
     TARGET_URL: 'https://lewan.baidu.com/rankland?gameSource=standalone',
+    TAB_SELECTORS: {
+      tab_container: 'div.tab-switch-box.type-1',
+      tab_items: 'div.tab-item',
+      mobile_tab_value: 'mobile',
+      mobile_tab_text: '手机游戏'
+    },
     RANKING_SELECTORS: {
       parent_container: 'div.game-rank-total-wrap.ubc-show-item',
-      main_container: 'div.rank-list-containers.standalone-rank',
+      main_container: 'div[class="rank-list-containers mobile-rank"]',
       annual_column: 'div.game-type-rank-wrap.annual-wrap',
       new_column: 'div.game-type-rank-wrap.new-wrap',
       upcoming_column: 'div.game-type-rank-wrap.upcoming-wrap',
@@ -200,6 +206,7 @@ const SCRAPER_CONFIGS = {
     CUSTOM_TIMEOUTS: {
       PAGE_LOAD: 60000,
       WAIT_AFTER_LOAD: 10000,
+      WAIT_FOR_TAB_CLICK: 3000,
       WAIT_FOR_LOAD_MORE: 5000,
       WAIT_AFTER_CLICK: 3000,
       MAX_WAIT_FOR_CONTENT: 30000,
