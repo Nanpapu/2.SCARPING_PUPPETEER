@@ -73,7 +73,7 @@ class TapTapRankingScraper {
         logger.info(`Total collected ${allGamesFromAllSources.length} games from ${this.config.TARGET_URLS.length} sources`);
 
         // Extract detailed game information in batches
-        logger.info(`Extracting game details (release date, developer, publisher, supplier) in batches of ${this.config.BATCH_SIZE}...`);
+        logger.info(`Extracting game details (release date, developer, publisher, manufacturer, supplier) in batches of ${this.config.BATCH_SIZE}...`);
         const detailedGames = [];
 
         for (let i = 0; i < allGamesFromAllSources.length; i += this.config.BATCH_SIZE) {
@@ -89,6 +89,7 @@ class TapTapRankingScraper {
                 releaseDate: gameDetails.releaseDate,
                 developer: gameDetails.developer,
                 publisher: gameDetails.publisher,
+                manufacturer: gameDetails.manufacturer,
                 supplier: gameDetails.supplier
               };
             } catch (error) {
@@ -98,6 +99,7 @@ class TapTapRankingScraper {
                 releaseDate: null,
                 developer: null,
                 publisher: null,
+                manufacturer: null,
                 supplier: null
               };
             }
@@ -510,6 +512,7 @@ class TapTapRankingScraper {
         releaseDate: null,
         developer: null,
         publisher: null,
+        manufacturer: null,
         supplier: null
       };
     }
@@ -530,6 +533,7 @@ class TapTapRankingScraper {
           releaseDate: null,
           developer: null,
           publisher: null,
+          manufacturer: null,
           supplier: null
         };
 
@@ -605,6 +609,9 @@ class TapTapRankingScraper {
                 } else if (labelText === '发行' && !result.publisher) {
                   result.publisher = value;
                   console.log(`DEBUG: Set publisher to: ${value}`);
+                } else if (labelText === '厂商' && !result.manufacturer) {
+                  result.manufacturer = value;
+                  console.log(`DEBUG: Set manufacturer to: ${value}`);
                 }
               }
             }

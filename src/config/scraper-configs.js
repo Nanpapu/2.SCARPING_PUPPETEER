@@ -115,14 +115,14 @@ const SCRAPER_CONFIGS = {
     BATCH_SIZE: 20,
     MAX_RETRIES: 3,
     TARGET_URLS: [
-      { url: 'https://www.taptap.cn/top/download?os=pc', source: 'download' }
-      // { url: 'https://www.taptap.cn/top/reserve?os=pc', source: 'reserve' }
+      { url: 'https://www.taptap.cn/top/download?os=pc', source: 'download' },
+      { url: 'https://www.taptap.cn/top/reserve?os=pc', source: 'reserve' }
     ],
-    TARGET_RANK: 10,
+    TARGET_RANK: 50,
     ITEMS_PER_SCROLL: 10,
     GAME_CONTAINER_SELECTOR: 'div.list-item',
-    TARGET_PAGE: 1,
-    SCROLL_TO_PAGE: 3,
+    TARGET_PAGE: 5,
+    SCROLL_TO_PAGE: 6,
     RANKING_SELECTORS: {
       rank: 'span[class*="data-v-ea802df3"]',
       title: 'div.text-with-tags.app-title span',
@@ -146,6 +146,12 @@ const SCRAPER_CONFIGS = {
         wrapper_div: 'div.flex-center--y[data-v-c22f6d57=""]',
         link_selector: 'a.tap-router.tap-router__prefetched.flex-center--y.mb-6',
         label_text: '发行'
+      },
+      manufacturer: {
+        container: 'div.row-card__content div.app-intro__item',
+        wrapper_div: 'div.flex-center--y[data-v-c22f6d57=""]',
+        link_selector: 'a.tap-router.tap-router__prefetched.flex-center--y.mb-6',
+        label_text: '厂商'
       },
       supplier: {
         container: 'div.row-card__content div.app-intro__item',
