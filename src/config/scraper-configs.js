@@ -178,7 +178,7 @@ const SCRAPER_CONFIGS = {
   },
 
   baidu: {
-    BATCH_SIZE: 50,
+    BATCH_SIZE: 10,
     MAX_RETRIES: 3,
     TARGET_URL: 'https://lewan.baidu.com/rankland?gameSource=standalone',
     TAB_SELECTORS: {
@@ -199,6 +199,25 @@ const SCRAPER_CONFIGS = {
       rank_span: 'div.unfold-status-item span.rank-query',
       load_more_button: 'div.go-more-link'
     },
+    GAME_DETAIL_SELECTORS: {
+      main_left_area: 'div.main-left-area',
+      game_icon: 'div[data-src]',
+      chinese_name: 'div.cname span',
+      english_name: 'div.ename',
+      plat_tags_container: 'div.plat-tags',
+      type_tags: 'div.type.tags',
+      right_box: 'div.right-box',
+      official_certification: 'div.official-certification.ubc-show-mod',
+      manufacturer_container: 'div.plats-info-tags',
+      manufacturer_name: 'span.tag-name',
+      manufacturer_content: 'span.tag-content',
+      plats_info_wrapper: 'div.plats-info-wrapper',
+      plats_info_wrap: 'div.plats-info-wrap',
+      plats_info_box: 'div.plats-info-box',
+      info_tags: 'div.plats-info-tags',
+      tag_name: 'span.tag-name',
+      tag_content: 'span.tag-content'
+    },
     LOAD_MORE_SELECTORS: {
       button_container: 'div.go-more-link',
       verify_text: '查看更多'
@@ -209,7 +228,9 @@ const SCRAPER_CONFIGS = {
       WAIT_FOR_TAB_CLICK: 3000,
       WAIT_FOR_LOAD_MORE: 5000,
       WAIT_AFTER_CLICK: 3000,
-      MAX_WAIT_FOR_CONTENT: 30000,
+      MAX_WAIT_FOR_CONTENT: 120000,
+      DETAIL_LOAD: 60000,
+      WAIT_AFTER_DETAIL: 3000,
       BATCH_DELAY: 2000
     }
   }

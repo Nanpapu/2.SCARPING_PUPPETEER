@@ -168,7 +168,46 @@ class BaiduScraper {
       await page.waitForTimeout(1000);
     }
 
-    return allRankingData;
+    logger.info(`Extracting detailed information for ${allRankingData.length} games...`);
+    const detailedGameData = [];
+
+    for (let i = 0; i < allRankingData.length; i += this.config.BATCH_SIZE) {
+      const batch = allRankingData.slice(i, i + this.config.BATCH_SIZE);
+      logger.info(`Processing game details batch ${Math.floor(i / this.config.BATCH_SIZE) + 1}/${Math.ceil(allRankingData.length / this.config.BATCH_SIZE)} (${batch.length} games)`);
+
+      const batchPromises = batch.map(async (game, index) => {
+        try {
+          logger.info(`  Processing game ${i + index + 1}/${allRankingData.length}: ${game.href}`);
+          const details = await this.extractGameDetails(game.href);
+          return {
+            ...game,
+            ...details
+          };
+        } catch (error) {
+          logger.error(`  Failed to extract details from ${game.href}: ${error.message}`);
+          return {
+            ...game,
+            chinese_name: null,
+            english_name: null,
+            game_icon: null,
+            tags: null,
+            manufacturer: null,
+            release_date: null,
+            publisher: null
+          };
+        }
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      detailedGameData.push(...batchResults);
+
+      if (i + this.config.BATCH_SIZE < allRankingData.length) {
+        logger.info(`  Waiting ${this.timeouts.BATCH_DELAY}ms before next batch...`);
+        await new Promise(resolve => setTimeout(resolve, this.timeouts.BATCH_DELAY));
+      }
+    }
+
+    return detailedGameData;
   }
 
   async clickLoadMoreButton(page, logger) {
@@ -230,6 +269,109 @@ class BaiduScraper {
       }
     } catch (error) {
       logger.warn(`Failed to click load more button: ${error.message}`);
+    }
+  }
+
+  async extractGameDetails(url) {
+    const tabInfo = await browserManager.getAvailableTab('baidu-detail');
+    const { tabId, page } = tabInfo;
+
+    try {
+      await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout: this.timeouts.DETAIL_LOAD
+      });
+
+      await page.waitForTimeout(this.timeouts.WAIT_AFTER_DETAIL);
+
+      await page.waitForSelector(this.config.GAME_DETAIL_SELECTORS.main_left_area, {
+        timeout: this.timeouts.MAX_WAIT_FOR_CONTENT
+      });
+
+      const details = await page.evaluate((selectors) => {
+        const getTextContent = (selector, parent = document) => {
+          const element = parent.querySelector(selector);
+          return element ? element.textContent.trim() : null;
+        };
+
+        const getAttribute = (selector, attribute, parent = document) => {
+          const element = parent.querySelector(selector);
+          return element ? element.getAttribute(attribute) : null;
+        };
+
+        const mainLeftArea = document.querySelector(selectors.main_left_area);
+        if (!mainLeftArea) return {};
+
+        const gameIcon = getAttribute(selectors.game_icon, 'data-src', mainLeftArea);
+        const chineseName = getTextContent(selectors.chinese_name, mainLeftArea);
+        const englishName = getTextContent(selectors.english_name, mainLeftArea);
+
+        const platTagsContainer = mainLeftArea.querySelector(selectors.plat_tags_container);
+        let tags = null;
+        if (platTagsContainer) {
+          const tagElements = platTagsContainer.querySelectorAll(selectors.type_tags);
+          if (tagElements.length > 0) {
+            tags = Array.from(tagElements).map(tag => tag.textContent.trim()).join(', ');
+          }
+        }
+
+        const rightBox = document.querySelector(selectors.right_box);
+        let manufacturer = null;
+        let releaseDate = null;
+        let publisher = null;
+
+        if (rightBox) {
+          const officialCert = rightBox.querySelector(selectors.official_certification);
+          if (officialCert) {
+            const manufacturerTags = officialCert.querySelectorAll(selectors.manufacturer_container);
+            for (const tag of manufacturerTags) {
+              const tagName = getTextContent(selectors.manufacturer_name, tag);
+              if (tagName && tagName.includes('厂商：')) {
+                manufacturer = getTextContent(selectors.manufacturer_content, tag);
+                break;
+              }
+            }
+          }
+
+          const platInfoWrapper = rightBox.querySelector(selectors.plats_info_wrapper);
+          if (platInfoWrapper) {
+            const platInfoWrap = platInfoWrapper.querySelector(selectors.plats_info_wrap);
+            if (platInfoWrap) {
+              const platInfoBox = platInfoWrap.querySelector(selectors.plats_info_box);
+              if (platInfoBox) {
+                const infoTags = platInfoBox.querySelectorAll(selectors.info_tags);
+                for (const tag of infoTags) {
+                  const tagName = getTextContent(selectors.tag_name, tag);
+                  const tagContent = tag.querySelector(selectors.tag_content);
+
+                  if (tagName && tagContent) {
+                    if (tagName.includes('发行时间')) {
+                      const span = tagContent.querySelector('span');
+                      releaseDate = span ? span.textContent.trim() : tagContent.textContent.trim();
+                    } else if (tagName.includes('发行商')) {
+                      publisher = tagContent.textContent.trim();
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        return {
+          chinese_name: chineseName,
+          english_name: englishName,
+          game_icon: gameIcon,
+          tags: tags,
+          manufacturer: manufacturer,
+          release_date: releaseDate,
+          publisher: publisher
+        };
+      }, this.config.GAME_DETAIL_SELECTORS);
+
+      return details;
+    } finally {
+      await browserManager.releaseTab(tabId);
     }
   }
 
